@@ -4,6 +4,8 @@ import { getLocale, getMessages } from "next-intl/server";
 import { Geist, Geist_Mono, Syne } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
+import "@/components/dgclips/workspace.css";
+import "@/components/dgclips/liquid-glass.css";
 import { AttributionTracker } from "@/components/attribution-tracker";
 import { DataFastIdentity } from "@/components/datafast-identity";
 import { Toaster } from "@/components/ui/sonner";

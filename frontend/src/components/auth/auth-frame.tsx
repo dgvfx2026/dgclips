@@ -7,7 +7,7 @@ import { ClipCutAnimation } from "@/components/auth/clip-cut-animation";
 export async function AuthFrame({ children, footer }: { children: React.ReactNode; footer: React.ReactNode }) {
   const t = await getTranslations("auth");
   return (
-    <div className="grid min-h-dvh bg-background lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+    <div className="dg-auth-frame grid min-h-dvh bg-background lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
       <div className="flex flex-col px-6 py-8 sm:px-12">
         <Link href="/" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight">
           <Image src="/dgclips.svg" alt="" width={24} height={24} className="size-6" priority />DGCLIPS

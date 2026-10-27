@@ -1,6 +1,6 @@
 # DGCLIPS Studio
 
-**Menos edição. Mais criação.** Um estúdio pessoal para transformar vídeos longos em clipes, com uma interface nova em português, tema escuro e identidade verde-lima.
+**Menos edição. Mais criação.** Um estúdio pessoal para transformar vídeos longos em clipes, com uma interface nova em português, tema Midnight, cartões de vidro translúcido e botões luminosos inspirados em Liquid Glass.
 
 ![Interface do DGCLIPS Studio](docs/images/dgclips-preview.png)
 
@@ -9,6 +9,7 @@ Adaptação do [SupoClip](https://github.com/FujiwaraChoki/supoclip). O motor or
 ## O que está incluído
 
 - Visão geral com importação de vídeo e estatísticas dos projetos.
+- Animações de entrada e ao rolar, ícones animados, luz ambiente e reflexos que acompanham o cursor, com suporte a movimento reduzido.
 - Biblioteca com busca sem distinção de acentos, filtros, ordenação e visualização em grade ou lista.
 - Favoritos salvos neste navegador, separados por usuário.
 - Galeria de estilos de legenda com seleção persistente para novos projetos.

@@ -43,3 +43,18 @@ test("mobile navigation, modal and layout fit the viewport", async ({ page }) =>
   await expect(page.getByRole("dialog")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test("cards reveal when scrolling and respect reduced motion", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 720 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/");
+  const card = page.locator(".dg-flow-card").first();
+  await expect(card).toHaveClass(/dg-reveal/);
+  await expect(card).not.toHaveClass(/dg-in-view/);
+  await card.scrollIntoViewIfNeeded();
+  await expect(card).toHaveClass(/dg-in-view/);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.reload();
+  await expect(card).toHaveClass(/dg-in-view/);
+  await expect(card).toHaveCSS("transition-duration", "0s");
+});
