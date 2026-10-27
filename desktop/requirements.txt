@@ -1,0 +1,6 @@
+pywebview==6.2.1
+faster-whisper==1.2.1
+# PyAV 19 removed metadata_errors; faster-whisper 1.2.1 still uses it.
+av==18.1.0
+yt-dlp[default]==2026.10.26
+imageio-ffmpeg==0.6.0

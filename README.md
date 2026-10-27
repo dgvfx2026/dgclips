@@ -4,6 +4,12 @@
 
 ![Interface do DGCLIPS Studio](docs/images/dgclips-preview.png)
 
+## Usar como um programa de Windows
+
+A edição **DGCLIPS Desktop** reúne interface e processamento local em um instalador, com modelo de voz incluído, sem Docker nem contas externas. Instale, abra pelo atalho, cole um link ou escolha um vídeo e salve os cortes. O instalador permite escolher o disco D:.
+
+[Instruções e detalhes da edição Windows](desktop/README.md). O processamento nesta edição é independente do backend web; os recursos e limites estão descritos no guia.
+
 Adaptação do [SupoClip](https://github.com/FujiwaraChoki/supoclip). O motor original de transcrição, seleção de trechos, legendagem, reenquadramento e edição foi preservado. Licença AGPL-3.0 em [LICENSE](LICENSE); procedência em [NOTICE.md](NOTICE.md).
 
 ## O que está incluído

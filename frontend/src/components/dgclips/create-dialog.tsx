@@ -7,9 +7,9 @@ import { parseApiError, formatSupportMessage } from "@/lib/api-error";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import type { StudioUser } from "./workspace";
 
-export function CreateDialog({ open, onOpenChange, demo, user, initialUrl, template, onDemo, onSetup }: {
+export function CreateDialog({ open, onOpenChange, demo, user, initialUrl, template, onDemo, onSetup, desktop = false, initialTab = "link" }: {
   open: boolean; onOpenChange: (value: boolean) => void; demo: boolean; user?: StudioUser;
-  initialUrl: string; template: string; onDemo: () => void; onSetup: (sourceUrl: string) => void;
+  initialUrl: string; template: string; onDemo: () => void; onSetup: (sourceUrl: string) => void; desktop?: boolean; initialTab?: "link" | "upload";
 }) {
   const [url, setUrl] = useState(initialUrl);
   const [tab, setTab] = useState("link");
@@ -23,6 +23,7 @@ export function CreateDialog({ open, onOpenChange, demo, user, initialUrl, templ
   const [dragging, setDragging] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => { if (open) { setUrl(initialUrl); setError(""); setStatus(""); } }, [open, initialUrl]);
+  useEffect(() => { if (open) setTab(initialTab); }, [open, initialTab]);
   const pickFile = (value?: File) => {
     if (!value) return;
     if (!/\.(mp4|mov|webm|mkv|m4v)$/i.test(value.name)) { setError("Escolha um vídeo MP4, MOV, WebM, MKV ou M4V."); return; }
@@ -55,9 +56,10 @@ export function CreateDialog({ open, onOpenChange, demo, user, initialUrl, templ
   };
   return <Dialog open={open} onOpenChange={(value) => { if (!busy) onOpenChange(value); }}><DialogContent showCloseButton={false} className="dg-create-dialog"><button type="button" className="dg-modal-close" aria-label="Fechar" disabled={busy} onClick={() => onOpenChange(false)}><X size={17} /></button><span className="dg-dialog-icon"><WandSparkles size={24} /></span><DialogTitle>Uma ideia. Muitos clipes.</DialogTitle><DialogDescription>Adicione seu vídeo. A gente encontra os melhores momentos.</DialogDescription><form onSubmit={submit}>
     {demo && <div className="dg-demo-form-note dg-activation-note" role="status"><ShieldCheck size={20} /><div><h3>O processamento ainda não está ativado</h3><p>Você está no modo demonstração. Seu vídeo não será enviado nem processado. Primeiro, configure os serviços de armazenamento e IA do seu estúdio.</p></div></div>}
+    {desktop && <p className="dg-demo-form-note"><ShieldCheck size={15} /> Tudo é processado neste computador. O modelo de voz já está incluído.</p>}
     <div className="dg-source-tabs"><button type="button" aria-pressed={tab === "link"} className={tab === "link" ? "selected" : ""} onClick={() => { setTab("link"); setError(""); }} disabled={busy}><Link2 size={15} />Colar um link</button><button type="button" aria-pressed={tab === "upload"} className={tab === "upload" ? "selected" : ""} onClick={() => { setTab("upload"); setError(""); }} disabled={busy}><Upload size={15} />Enviar arquivo</button></div>
     {tab === "link" ? <label className="dg-field">Link do vídeo<input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://youtube.com/watch?v=…" disabled={busy} /><small>YouTube, Twitch ou Kick · Vídeos gravados</small></label> : <div className={`dg-dropzone ${dragging ? "dragging" : ""}`} onDragOver={(e) => { e.preventDefault(); if (!busy) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); if (!busy) pickFile(e.dataTransfer.files[0]); }}><Upload size={25} /><button type="button" onClick={() => input.current?.click()} disabled={busy}>{file ? file.name : "Escolha um vídeo ou arraste aqui"}</button><small>{file ? `${(file.size / 1000000).toFixed(1)} MB · Clique para trocar` : `MP4, MOV, WebM, MKV · Até ${formatUploadLimit(maxVideoUploadBytes())}`}</small><input ref={input} type="file" accept=".mp4,.mov,.webm,.mkv,.m4v" className="sr-only" aria-label="Escolher vídeo" disabled={busy} onChange={(e) => pickFile(e.target.files?.[0])} /></div>}
-    <div className="dg-form-row"><label className="dg-field">Duração dos clipes<select value={duration} onChange={(e) => setDuration(e.target.value)} disabled={busy}><option value="auto">Automática · Escolhida pela IA</option><option value="short">Curtos · 15–30 segundos</option><option value="medium">Médios · 30–60 segundos</option><option value="long">Longos · 60–90 segundos</option></select></label><label className="dg-field">Formato<select value={format} onChange={(e) => setFormat(e.target.value)} disabled={busy}><option value="vertical">Vertical · 9:16</option><option value="vertical_fit">Vertical · Vídeo completo</option><option value="original">Formato original</option></select></label></div>
+    <div className="dg-form-row"><label className="dg-field">Duração dos clipes<select value={duration} onChange={(e) => setDuration(e.target.value)} disabled={busy}><option value="auto">Automática · Sugestão do DGCLIPS</option><option value="short">Curtos · 15–30 segundos</option><option value="medium">Médios · 30–60 segundos</option><option value="long">Longos · 60–90 segundos</option></select></label><label className="dg-field">Formato<select value={format} onChange={(e) => setFormat(e.target.value)} disabled={busy}><option value="vertical">Vertical · 9:16</option><option value="vertical_fit">Vertical · Vídeo completo</option><option value="original">Formato original</option></select></label></div>
     <label className="dg-checkbox"><input type="checkbox" checked={subtitles} onChange={(e) => setSubtitles(e.target.checked)} disabled={busy} /><span><strong>Legendas automáticas</strong><small>Cada palavra no ritmo do seu conteúdo.</small></span><Captions size={20} /></label>
     {error && <p role="alert" className="dg-form-error">{error}</p>}
     {!demo && !user && <p className="dg-demo-form-note">Entre na sua conta para iniciar um projeto.</p>}
