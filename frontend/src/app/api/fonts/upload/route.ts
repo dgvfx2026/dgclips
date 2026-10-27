@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { buildBackendAuthHeaders } from "@/lib/backend-auth";
-import { backendTraceHeaders } from "@/server/backend-api";
+import { backendTraceHeaders, getBackendApiBaseUrl } from "@/server/backend-api";
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -13,9 +13,7 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const apiUrl =
-    process.env.BACKEND_INTERNAL_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:8000";
+    getBackendApiBaseUrl();
   const normalizedApiUrl = apiUrl.replace(/\/$/, "");
   const backendAuthHeaders = { ...buildBackendAuthHeaders(session.user.id), ...(await backendTraceHeaders()) };
 

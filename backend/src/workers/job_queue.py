@@ -21,7 +21,7 @@ class DuplicateJobError(RuntimeError):
 
 def _get_redis_settings() -> RedisSettings:
     config = get_config()
-    return RedisSettings(host=config.redis_host, port=config.redis_port, password=config.redis_password, database=0)
+    return RedisSettings(host=config.redis_host, port=config.redis_port, password=config.redis_password, **({"ssl": True} if getattr(config, "redis_ssl", False) else {}), database=0)
 
 
 class JobQueue:

@@ -48,16 +48,16 @@ git push -u origin main
 
 Se estiver usando o checkout local entregue junto do ZIP, ele conserva a origem e o histórico do SupoClip para rastreabilidade. Nesse caso, renomeie o remoto antes de adicionar o seu: `git remote rename origin upstream`.
 
-## Publicar a interface na Vercel
+## Publicar na Vercel
 
-1. Importe seu repositório na Vercel.
-2. Selecione **Root Directory: `frontend`** e framework **Next.js**.
-3. Ative **Include source files outside of the Root Directory in the Build Step**. As páginas herdadas de changelog leem o arquivo `CHANGELOG.md` da raiz.
-4. Use Node.js **22.x**. Os comandos de instalação e build já estão em `frontend/vercel.json`.
-5. Para conhecer a interface primeiro, defina `DGCLIPS_DEMO=true` e `NEXT_PUBLIC_SELF_HOST=true`. A demonstração não exige banco nem chaves.
-6. Publique. Para processar vídeos de verdade, complete o [guia de produção](docs/DGCLIPS_DEPLOY.md), configure as variáveis e faça um novo deploy.
+1. Importe [dgvfx2026/dgclips](https://github.com/dgvfx2026/dgclips) na Vercel.
+2. Use a raiz do repositório (**Root Directory: .**). O arquivo **vercel.json da raiz** define os serviços e as rotas.
+3. A interface é pública; backend e MCP ficam internos. As rotas /api continuam no Next.js para preservar o login.
+4. Os bindings frontend → backend e mcp → backend são injetados automaticamente pela Vercel. Não preencha essas URLs manualmente.
+5. Comece com DGCLIPS_DEMO=true e NEXT_PUBLIC_SELF_HOST=true. Sem serviços externos, a interface abre em demonstração e o worker aguarda configuração.
+6. Para processar vídeos, configure PostgreSQL, Redis TLS, S3 e chaves de IA conforme [o guia de publicação](docs/DGCLIPS_DEPLOY.md). Depois mude DGCLIPS_DEMO=false e faça novo deploy.
 
-**A Vercel recebe a interface. O processamento de vídeo roda em um servidor separado com API, worker e Redis.** O banco PostgreSQL é compartilhado entre os dois. O armazenamento privado S3 permite uploads e downloads diretos por URLs assinadas. Isso evita encaminhar vídeos grandes pelas funções da interface. Veja os [limites oficiais da Vercel](https://vercel.com/docs/functions/limitations).
+O worker é um daemon de 2 GiB com uma instância em iad1. Os serviços em contêiner e os daemons usam recursos e cotas da Vercel. [Serviços](https://vercel.com/docs/services) · [Daemons e limites](https://vercel.com/docs/daemons/limits).
 
 ## Rodar tudo no seu computador
 
@@ -67,7 +67,7 @@ O `docker-compose.yml` original continua disponível. Copie o `.env.example` da 
 docker compose up -d --build
 ```
 
-A configuração completa local do upstream está em [docs/setup.md](docs/setup.md). Para a arquitetura com Vercel, use **`docker-compose.production.yml`**, que não inicia um segundo frontend.
+A configuração completa local do upstream está em [docs/setup.md](docs/setup.md). Para a arquitetura com Vercel, use **`docker-compose.production.yml`**, que não inicia um segundo frontend. Essa é a alternativa com servidor próprio, documentada em docs/DGCLIPS_DOCKER_DEPLOY.md.
 
 ## Verificar
 

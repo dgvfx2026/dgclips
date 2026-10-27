@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { buildBackendAuthHeaders } from "@/lib/backend-auth";
-import { backendTraceHeaders } from "@/server/backend-api";
+import { backendTraceHeaders, getBackendApiBaseUrl } from "@/server/backend-api";
 import { maxVideoUploadBytes, uploadTooLargeMessage } from "@/lib/video-upload";
 
 // Same slack the API allows for multipart boundaries around a file on the cap.
@@ -31,9 +31,7 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const apiUrl =
-    process.env.BACKEND_INTERNAL_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:8000";
+    getBackendApiBaseUrl();
   const normalizedApiUrl = apiUrl.replace(/\/$/, "");
   const upstream = await fetch(`${normalizedApiUrl}/upload`, {
     method: "POST",

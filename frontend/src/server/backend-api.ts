@@ -17,6 +17,7 @@ export const DEFAULT_FORWARDED_HEADERS = [
 
 export function getBackendApiBaseUrl() {
   const apiUrl =
+    process.env.DGCLIPS_BACKEND_URL ||
     process.env.BACKEND_INTERNAL_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
     "http://localhost:8000";
@@ -25,7 +26,7 @@ export function getBackendApiBaseUrl() {
 }
 
 export function buildBackendUrl(path: string) {
-  return `${getBackendApiBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
+  return new URL(path.replace(/^\/+/, ""), `${getBackendApiBaseUrl()}/`).toString();
 }
 
 const TRACE_ID_PATTERN = /^[A-Za-z0-9._-]{8,128}$/;

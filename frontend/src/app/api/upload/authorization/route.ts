@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { buildBackendAuthHeaders, hasSignedBackendAuth } from "@/lib/backend-auth";
-import { backendTraceHeaders } from "@/server/backend-api";
+import { backendTraceHeaders, getBackendApiBaseUrl } from "@/server/backend-api";
 
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
 
   const payload = await request.json().catch(() => null);
   if (payload) {
-    const internalUrl = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    const internalUrl = getBackendApiBaseUrl();
     const upstream = await fetch(`${internalUrl.replace(/\/$/, "")}/upload/authorize`, {
       method: "POST",
       headers: { ...buildBackendAuthHeaders(session.user.id), ...(await backendTraceHeaders()), "Content-Type": "application/json" },
@@ -27,6 +27,10 @@ export async function POST(request: Request) {
     if (authorization?.storage === "s3") {
       return NextResponse.json(authorization, { headers: { "Cache-Control": "no-store" } });
     }
+  }
+
+  if (process.env.DGCLIPS_BACKEND_URL) {
+    return NextResponse.json({ error: "Configure MEDIA_STORAGE=s3 para uploads entre serviços." }, { status: 503 });
   }
 
   if (!hasSignedBackendAuth()) {

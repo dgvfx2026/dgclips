@@ -22,12 +22,23 @@ jobs:
         include:
           - service: frontend
             context: .
+            dockerfile: frontend/Dockerfile
             options: --target runner
           - service: backend
             context: ./backend
+            dockerfile: backend/Dockerfile
             options: --build-arg BACKEND_CPU_ONLY=true
           - service: mcp
             context: ./mcp
+            dockerfile: mcp/Dockerfile
+            options: ""
+          - service: backend-vercel
+            context: ./backend
+            dockerfile: backend/Dockerfile.vercel
+            options: --build-arg BACKEND_CPU_ONLY=true
+          - service: mcp-vercel
+            context: ./mcp
+            dockerfile: mcp/Dockerfile.vercel
             options: ""
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +46,7 @@ jobs:
         run: >-
           docker build --pull ${{ matrix.options }}
           --tag supoclip-security:${{ matrix.service }}
-          --file ${{ matrix.service }}/Dockerfile ${{ matrix.context }}
+          --file ${{ matrix.dockerfile }} ${{ matrix.context }}
       - name: Reject fixable critical vulnerabilities in the final image
         run: >-
           docker run --rm

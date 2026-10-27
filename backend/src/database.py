@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import (
 # Load environment variables
 load_dotenv()
 
-DEFAULT_DATABASE_URL = os.getenv(
+DEFAULT_DATABASE_URL = os.getenv("BACKEND_DATABASE_URL") or os.getenv(
     "DATABASE_URL", "postgresql+asyncpg://localhost:5432/supoclip"
 )
 
@@ -50,7 +50,7 @@ def _build_engine(database_url: str) -> AsyncEngine:
 
 
 def get_database_url() -> str:
-    return _database_url_override or os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
+    return _database_url_override or os.getenv("BACKEND_DATABASE_URL") or os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
 
 
 def configure_database(

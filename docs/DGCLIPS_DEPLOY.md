@@ -1,115 +1,91 @@
-# Publicação do DGCLIPS: GitHub + Vercel + processamento
+# DGCLIPS na Vercel com Services
 
-## Estrutura
+## Importação correta
+
+Use **Root Directory: `.`**, a raiz do repositório. Não selecione `frontend/` para esta configuração. O arquivo [`vercel.json`](../vercel.json) da raiz descreve o projeto inteiro. O serviço `frontend` usa Next.js; `backend` e `mcp` usam seus `Dockerfile.vercel`; `worker` é um daemon privado.
+
+A arquitetura foi confirmada pelo proprietário em 27/10/2026:
+
+| Componente | Entrada pública | Comunicação |
+| --- | --- | --- |
+| `frontend` | Todas as rotas, incluindo `/api` | Chama `backend` via `DGCLIPS_BACKEND_URL` |
+| `backend` | Nenhuma | Usa PostgreSQL, Redis e S3 externos |
+| `mcp` | Nenhuma | Chama `backend` via `SUPOCLIP_API_URL` |
+| `worker` | Nenhuma; daemon | Consome a fila Redis e processa vídeos |
+
+**Não adicione um rewrite público de `/api/*` para o backend.** Essas rotas já existem no Next.js e cuidam do login, da sessão e das assinaturas para a API. A interface faz as chamadas internas a partir das funções do servidor. Não há uso de bindings em middleware ou durante builds.
+
+Não configure `DGCLIPS_BACKEND_URL` nem `SUPOCLIP_API_URL` nas variáveis: a Vercel injeta ambas em runtime. [Bindings oficiais](https://vercel.com/docs/services/bindings).
+
+## Primeiro deploy: demonstração
+
+Como os serviços externos ainda não estão configurados, comece com:
 
 ```text
-Navegador → Vercel (Next.js + login) → API de vídeo (HTTPS)
-                      ↓                    ↓
-                PostgreSQL compartilhado ← worker + Redis
-                      
-Navegador ← URLs assinadas → bucket S3 privado ← API/worker
+DGCLIPS_DEMO=true
+NEXT_PUBLIC_SELF_HOST=true
+NEXT_PUBLIC_APP_URL=https://SEU-PROJETO.vercel.app
+BETTER_AUTH_URL=https://SEU-PROJETO.vercel.app
+NEXT_PUBLIC_SOURCE_URL=https://github.com/dgvfx2026/dgclips
 ```
 
-O usuário entra na interface; ela assina as chamadas à API com `BACKEND_AUTH_SECRET`. A API confere a assinatura e a propriedade do projeto. Segredos de IA e armazenamento ficam no servidor. As credenciais S3 não vão ao navegador; ele recebe autorizações temporárias.
+A interface abre com exemplos identificados. O backend responde que a configuração está pendente e o worker aguarda sem consumir a fila. O login e o processamento real ficam desativados. Os contêineres ainda precisam ser construídos no deploy.
 
-## 1. Banco compartilhado
+O worker confirmado usa uma instância de **2 GiB em `iad1`**. Daemons só executam em produção e usam as cotas/recursos do plano. Para deixar uma demonstração sem instância de worker, altere temporariamente `instances.iad1` para `0`. [Limites dos daemons](https://vercel.com/docs/daemons/limits).
 
-Crie um banco PostgreSQL acessível com TLS tanto pelo servidor quanto pela Vercel. Use um banco dedicado ao DGCLIPS e guarde o endereço, usuário e senha. Encode caracteres especiais da senha na URL.
+## Configurar os serviços externos
 
-- **Vercel / Prisma:** `postgresql://usuario:senha@host:5432/dgclips?sslmode=require`
-- **Servidor / asyncpg:** `postgresql+asyncpg://usuario:senha@host:5432/dgclips?ssl=require`
+O arquivo [`deploy/vercel.env.example`](../deploy/vercel.env.example) lista os nomes das variáveis. Ele contém apenas exemplos. Configure os valores na Vercel; não envie segredos no chat nem os adicione ao GitHub.
 
-As duas URLs precisam apontar para o mesmo banco e esquema. Remova da URL asyncpg parâmetros exclusivos do Prisma ou do provedor. Para migrações, use a conexão direta do banco; configure pooler apenas conforme as orientações do seu provedor.
+### PostgreSQL
 
-Antes da primeira inicialização, dentro de `frontend/`, configure `DATABASE_URL` no ambiente e rode `pnpm exec prisma migrate deploy`. A API aplica suas próprias migrações adicionais na inicialização. Faça backup antes de atualizar instalações que já tenham dados.
+Crie um banco dedicado com TLS. Frontend e backend devem apontar para **o mesmo banco e esquema**, usando os formatos adequados para cada cliente:
 
-## 2. Bucket privado
+```text
+DATABASE_URL=postgresql://USUARIO:SENHA@HOST:5432/dgclips?sslmode=require
+BACKEND_DATABASE_URL=postgresql+asyncpg://USUARIO:SENHA@HOST:5432/dgclips?ssl=require
+```
 
-Crie um bucket privado em um armazenamento compatível com S3. Dê à credencial de serviço permissão para ler, gravar, listar, excluir e executar upload multipart apenas nesse bucket. Não habilite leitura pública.
+Encode caracteres especiais da senha. Use a conexão direta para aplicar as migrações do Prisma. Remova da URL asyncpg parâmetros exclusivos do Prisma/provedor. Na pasta `frontend`, com `DATABASE_URL` definida no ambiente, execute `pnpm exec prisma migrate deploy` antes de ativar o login. A API aplica suas migrações adicionais na inicialização.
 
-Configure o CORS com `deploy/storage-cors.json`, substituindo a origem pelo domínio exato da sua interface. O cabeçalho `ETag` precisa estar exposto para concluir os uploads multipart. Inclua apenas os domínios usados pelo seu estúdio.
+### Redis
 
-Preencha as variáveis `MEDIA_S3_*` no servidor. No Amazon S3 padrão, deixe `MEDIA_S3_ENDPOINT` vazio; outros provedores normalmente informam um endpoint próprio. API e worker precisam usar o mesmo bucket, região, prefixo e credenciais.
+Use um endpoint **Redis TCP**, com TLS e senha. Um endereço HTTP/REST não serve para o worker ARQ. Configure `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` e `REDIS_SSL=true`. A API, o acompanhamento de progresso e o worker usam a mesma instância e a conexão TLS.
 
-O `docker-compose.production.yml` usa `MEDIA_STORAGE=s3`: downloads e uploads recebem URLs temporárias para o bucket e o arquivo não atravessa a Vercel. Não troque para armazenamento local nessa arquitetura sem planejar uma rota externa própria para arquivos grandes. Confira os [limites de funções da Vercel](https://vercel.com/docs/functions/limitations).
+### Armazenamento S3
 
-## 3. Segredos e IA
+Configure um bucket **privado** e preencha `MEDIA_STORAGE=s3` e as variáveis `MEDIA_S3_*`. API e worker não compartilham disco persistente na Vercel: os arquivos precisam passar pelo bucket. A credencial deve poder ler, gravar, listar, excluir e executar uploads multipart apenas nesse bucket.
 
-Gere **três valores diferentes**, com pelo menos 32 caracteres cada. Você pode rodar este comando três vezes:
+Use [`deploy/storage-cors.json`](../deploy/storage-cors.json), substituindo a origem pelo domínio real da interface. Exponha `ETag` para concluir uploads multipart. Deixe `MEDIA_S3_ENDPOINT` vazio para o endpoint padrão do Amazon S3; outros provedores fornecem seu próprio endereço. Uploads e downloads usam URLs assinadas e não expõem as credenciais do bucket.
+
+## Login e IA
+
+Gere três segredos diferentes com pelo menos 32 caracteres. Este comando gera um valor novo a cada execução:
 
 ```bash
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Use um valor em `BETTER_AUTH_SECRET`, outro em `BACKEND_AUTH_SECRET` e outro em `APP_SETTINGS_ENCRYPTION_KEY`. Os dois últimos são compartilhados entre Vercel e servidor. Não coloque segredos em variáveis que começam com `NEXT_PUBLIC_`.
+Configure `BETTER_AUTH_SECRET`, `BACKEND_AUTH_SECRET` e `APP_SETTINGS_ENCRYPTION_KEY`. Não use `NEXT_PUBLIC_` para segredos. `BETTER_AUTH_URL` e `NEXT_PUBLIC_APP_URL` precisam conter o domínio HTTPS real da interface.
 
-Configure sua chave AssemblyAI e uma chave de provedor de modelo no servidor. O arquivo `deploy/.env.example` mostra o formato de configuração. Confirme que o modelo definido em `LLM` está disponível na sua conta. Para outros provedores ou transcrição local, consulte [configuration.md](configuration.md).
+Adicione a chave AssemblyAI e a chave de um provedor de modelo. Configure `LLM` com um modelo disponível na sua conta. Mantenha `SELF_HOST=true` e `NEXT_PUBLIC_SELF_HOST=true`. Consulte [configuration.md](configuration.md) para outros provedores ou transcrição local.
 
-## 4. API, worker e HTTPS
+Depois de configurar tudo:
 
-Em um servidor Linux com Docker Compose, copie o repositório e execute na raiz:
+1. Altere `DGCLIPS_DEMO=false` e faça novo deploy de produção.
+2. Abra `/sign-up`, crie sua conta e confira o login.
+3. Para uso pessoal, defina `DISABLE_SIGN_UP=true` e faça novo deploy.
+4. Processe primeiro um vídeo curto seu. Confira progresso, legendas, edição e download.
+5. Teste um upload maior que 4,5 MB e confirme o envio direto ao bucket.
 
-```bash
-cp deploy/.env.example .env
-# Edite .env e substitua todos os exemplos pelos seus valores.
-docker compose -f docker-compose.production.yml config --quiet
-docker compose -f docker-compose.production.yml up -d --build
-docker compose -f docker-compose.production.yml logs -f backend worker
-```
+Os serviços compartilham variáveis no projeto Vercel; por isso o backend usa `BACKEND_DATABASE_URL` e o frontend usa `DATABASE_URL`. O worker aguarda a configuração antes de iniciar o ARQ e processa um vídeo por vez para respeitar a memória inicial. Vídeos maiores podem exigir mais memória/CPU; acompanhe os logs e as cotas antes de ampliar o uso.
 
-Configure um registro DNS para `API_DOMAIN` apontando para esse servidor. As portas 80 e 443 precisam estar disponíveis; o Caddy incluído emite o certificado HTTPS automaticamente. Evite iniciar esse Caddy na mesma porta de um proxy já instalado: nesse caso, use seu proxy existente e encaminhe o tráfego para a API na rede interna.
+## Desenvolvimento e validação
 
-PostgreSQL não é criado por esse arquivo: ele é o banco externo da etapa 1. Redis fica na rede privada dos contêineres, com senha e persistência. API e worker compartilham os volumes temporários e o bucket. A API não publica a porta 8000 diretamente na internet.
+`vercel dev -L` inicia os serviços locais e injeta bindings. Daemons ainda precisam ser executados separadamente com Docker durante o desenvolvimento. [Serviços](https://vercel.com/docs/services), [desenvolvimento de daemons](https://vercel.com/docs/daemons).
 
-Confira `https://api.seu-dominio.com/health/db`: precisa responder com sucesso. Confira também o estado saudável do worker. A primeira imagem pode levar tempo para instalar FFmpeg e dependências de análise de vídeo. Dimensione CPU, RAM e disco para o tamanho dos seus vídeos.
+O ambiente de entrega não tem Docker nem suas credenciais de produção. A configuração e o código foram preparados e verificados; o primeiro build dos contêineres e o processamento real precisam ser confirmados na sua conta. O workflow do GitHub executa os testes e o build do frontend.
 
-## 5. Variáveis na Vercel
+## Alternativa com servidor próprio
 
-Na Vercel, selecione `frontend` como Root Directory e habilite a inclusão de arquivos da raiz no build. Configure estas variáveis no ambiente de produção:
-
-| Variável | Valor |
-| --- | --- |
-| `DGCLIPS_DEMO` | `false` |
-| `NEXT_PUBLIC_SELF_HOST` | `true` |
-| `NEXT_PUBLIC_APP_URL` | Domínio HTTPS exato da interface |
-| `BETTER_AUTH_URL` | Mesmo endereço da interface |
-| `BETTER_AUTH_TRUSTED_ORIGINS` | Domínios autorizados, separados por vírgulas |
-| `DATABASE_URL` | URL PostgreSQL para Prisma, da etapa 1 |
-| `BETTER_AUTH_SECRET` | Segredo exclusivo do login |
-| `BACKEND_AUTH_SECRET` | Mesmo segredo de assinatura do servidor |
-| `APP_SETTINGS_ENCRYPTION_KEY` | Mesma chave de criptografia do servidor |
-| `NEXT_PUBLIC_API_URL` | Endereço HTTPS da API |
-| `BACKEND_INTERNAL_URL` | Mesmo endereço HTTPS da API, acessível pela Vercel |
-| `DISABLE_SIGN_UP` | `false` inicialmente; `true` depois da sua conta criada |
-| `NEXT_PUBLIC_MAX_VIDEO_UPLOAD_BYTES` | Mesmo limite do servidor; padrão `4000000000` |
-| `NEXT_PUBLIC_SOURCE_URL` | URL do seu repositório com esta versão do código |
-
-No servidor, `CORS_ORIGINS` deve incluir a origem exata da interface. Não use `*` com autenticação. Se adicionar domínio próprio, atualize as URLs de autenticação, o CORS da API e do bucket e faça novo deploy. As variáveis `NEXT_PUBLIC_*` são aplicadas no build.
-
-Para validar sem exibir segredos, copie as variáveis do frontend para um `.env.local` local e rode `pnpm check:deploy`. O arquivo é ignorado pelo Git. Depois faça o deploy de produção na Vercel.
-
-Em demos e previews, mantenha `DGCLIPS_DEMO=true` e use ambientes separados para não ligar testes ao seu banco real.
-
-## 6. Primeira utilização
-
-1. Abra `/sign-up`, crie sua conta e confirme que o login funciona.
-2. Para uso pessoal, altere `DISABLE_SIGN_UP=true` na Vercel e faça novo deploy.
-3. Teste primeiro um vídeo curto seu. Verifique a criação, o progresso, as legendas e a abertura do editor.
-4. Teste um upload e um download acima de 4,5 MB para confirmar que o navegador usa URLs assinadas do bucket.
-5. Teste o formato vertical e confira a qualidade antes de enviar vídeos longos.
-
-O processamento depende de credenciais e serviços reais e não foi executado com suas contas na entrega. Não há chaves embutidas. Publicação direta em redes sociais permanece opcional e exige a configuração OAuth original; baixar os clipes não exige conectar redes sociais. Recuperação de senha por e-mail depende da configuração de envio do upstream.
-
-## Diagnóstico rápido
-
-| Sintoma | Verificação |
-| --- | --- |
-| Continua em demonstração | `DGCLIPS_DEMO`, URLs, banco e segredos exigidos; faça redeploy |
-| Login falha | Mesmo banco, migrações, segredo do login e URLs de origem |
-| API retorna 401 | `BACKEND_AUTH_SECRET` precisa coincidir nos dois serviços |
-| Upload falha no navegador | CORS da API/bucket, `ETag` exposto, HTTPS e limite de arquivo |
-| Fila não anda | Worker saudável, conexão Redis e logs de transcrição/IA |
-| Vídeo não reproduz | Bucket e chave iguais em API/worker, CORS e URL assinada válida |
-| Build não encontra changelog | Inclua arquivos fora da Root Directory na configuração da Vercel |
-
-Antes de atualizar o servidor, deixe os trabalhos em andamento terminarem e preserve o banco e os volumes. O repositório mantém o motor e as instruções técnicas originais em `docs/`.
+O `docker-compose.production.yml` continua disponível para rodar API/worker/Redis em um servidor próprio. Nesse caso, consulte [DGCLIPS_DOCKER_DEPLOY.md](DGCLIPS_DOCKER_DEPLOY.md) e publique somente a interface como projeto Next.js separado. Não misture as duas configurações de deploy.

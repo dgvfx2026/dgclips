@@ -679,7 +679,7 @@ class ClipEditingMixin:
             redis_client = redis.Redis(
                 host=self.config.redis_host,
                 port=self.config.redis_port,
-                password=self.config.redis_password,
+                password=self.config.redis_password, **({"ssl": True} if getattr(self.config, "redis_ssl", False) else {}),
                 decode_responses=True,
             )
             try:

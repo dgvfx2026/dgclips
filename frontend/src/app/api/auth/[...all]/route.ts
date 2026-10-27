@@ -1,14 +1,9 @@
-import { auth } from "@/lib/auth";
-import { toNextJsHandler } from "better-auth/next-js";
-import { workspaceConfigured } from "@/lib/dgclips";
 import { NextResponse } from "next/server";
-
-const handlers = toNextJsHandler(auth.handler);
-export async function GET(request: Request) {
+import { workspaceConfigured } from "@/lib/dgclips";
+async function handle(request: Request, method: "GET" | "POST") {
   if (!workspaceConfigured()) return NextResponse.json({ error: "Configure o servidor para ativar a autenticação." }, { status: 503 });
-  return handlers.GET(request);
+  const [{ auth }, { toNextJsHandler }] = await Promise.all([import("@/lib/auth"), import("better-auth/next-js")]);
+  return toNextJsHandler(auth.handler)[method](request);
 }
-export async function POST(request: Request) {
-  if (!workspaceConfigured()) return NextResponse.json({ error: "Configure o servidor para ativar a autenticação." }, { status: 503 });
-  return handlers.POST(request);
-}
+export function GET(request: Request) { return handle(request, "GET"); }
+export function POST(request: Request) { return handle(request, "POST"); }

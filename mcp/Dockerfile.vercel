@@ -1,0 +1,13 @@
+FROM python:3.11.17-slim-trixie
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 \
+    PORT=80 \
+    SUPOCLIP_MCP_HOST=0.0.0.0 \
+    SUPOCLIP_MCP_TRANSPORT=streamable-http \
+    SUPOCLIP_MCP_REQUIRE_BEARER_AUTH=true \
+    SUPOCLIP_DOWNLOAD_DIR=/tmp/dgclips-downloads
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
+RUN pip install --no-cache-dir .
+EXPOSE 80
+CMD ["supoclip-mcp"]

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "frontend": {
+      "root": "frontend",
+      "framework": "nextjs",
+      "installCommand": "pnpm install --frozen-lockfile",
+      "buildCommand": "pnpm run build",
+      "bindings": [
+        { "type": "service", "service": "backend", "format": "url", "env": "DGCLIPS_BACKEND_URL" }
+      ]
+    },
+    "backend": {
+      "root": "backend",
+      "runtime": "container",
+      "entrypoint": "Dockerfile.vercel"
+    },
+    "mcp": {
+      "root": "mcp",
+      "runtime": "container",
+      "entrypoint": "Dockerfile.vercel",
+      "bindings": [
+        { "type": "service", "service": "backend", "format": "url", "env": "SUPOCLIP_API_URL" }
+      ]
+    }
+  },
+  "daemons": {
+    "worker": {
+      "root": "backend",
+      "entrypoint": "Dockerfile.vercel",
+      "command": [".venv/bin/python", "-m", "src.vercel_worker"],
+      "instances": { "iad1": 1 },
+      "resources": { "requests": { "memory": "2Gi" } },
+      "terminationGracePeriodSeconds": 300
+    }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": { "service": "frontend" } }
+  ]
+}

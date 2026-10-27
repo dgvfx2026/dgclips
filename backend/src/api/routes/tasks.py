@@ -242,7 +242,7 @@ async def _load_task_source_metadata(task_id: str, db: AsyncSession | None = Non
     redis_client = redis.Redis(
         host=runtime_config.redis_host,
         port=runtime_config.redis_port,
-        password=runtime_config.redis_password,
+        password=runtime_config.redis_password, **({"ssl": True} if getattr(runtime_config, "redis_ssl", False) else {}),
         decode_responses=True,
     )
     try:
@@ -271,7 +271,7 @@ async def _save_task_source_metadata(
     redis_client = redis.Redis(
         host=runtime_config.redis_host,
         port=runtime_config.redis_port,
-        password=runtime_config.redis_password,
+        password=runtime_config.redis_password, **({"ssl": True} if getattr(runtime_config, "redis_ssl", False) else {}),
         decode_responses=True,
     )
     try:
@@ -785,7 +785,7 @@ async def get_task_progress_sse(task_id: str, request: Request):
         redis_client = redis.Redis(
             host=runtime_config.redis_host,
             port=runtime_config.redis_port,
-            password=runtime_config.redis_password,
+            password=runtime_config.redis_password, **({"ssl": True} if getattr(runtime_config, "redis_ssl", False) else {}),
             decode_responses=True,
         )
 
@@ -1253,7 +1253,7 @@ async def cancel_task(
         redis_client = redis.Redis(
             host=runtime_config.redis_host,
             port=runtime_config.redis_port,
-            password=runtime_config.redis_password,
+            password=runtime_config.redis_password, **({"ssl": True} if getattr(runtime_config, "redis_ssl", False) else {}),
             decode_responses=True,
         )
         try:
@@ -1349,7 +1349,7 @@ async def resume_task(
                     redis_client = redis.Redis(
                         host=runtime_config.redis_host,
                         port=runtime_config.redis_port,
-                        password=runtime_config.redis_password,
+                        password=runtime_config.redis_password, **({"ssl": True} if getattr(runtime_config, "redis_ssl", False) else {}),
                         decode_responses=True,
                     )
                     try:
@@ -1427,7 +1427,7 @@ async def list_dead_letter_tasks(request: Request, db: AsyncSession = Depends(ge
     redis_client = redis.Redis(
         host=runtime_config.redis_host,
         port=runtime_config.redis_port,
-        password=runtime_config.redis_password,
+        password=runtime_config.redis_password, **({"ssl": True} if getattr(runtime_config, "redis_ssl", False) else {}),
         decode_responses=True,
     )
     try:

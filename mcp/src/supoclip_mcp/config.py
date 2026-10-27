@@ -69,7 +69,7 @@ def load_settings() -> Settings:
     except ValueError:
         timeout = 60.0
 
-    raw_port = _clean(os.getenv("SUPOCLIP_MCP_PORT"))
+    raw_port = _clean(os.getenv("SUPOCLIP_MCP_PORT")) or _clean(os.getenv("PORT"))
     try:
         mcp_port = int(raw_port) if raw_port else 9100
     except ValueError:

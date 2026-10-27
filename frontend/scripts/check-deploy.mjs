@@ -5,7 +5,8 @@ if (demo) {
   console.log("DGCLIPS: demonstração ativada. Nenhuma chave é necessária; o processamento real fica desativado.");
   process.exit(0);
 }
-const required = ["DATABASE_URL", "BETTER_AUTH_SECRET", "BACKEND_AUTH_SECRET", "APP_SETTINGS_ENCRYPTION_KEY", "NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_API_URL", "BETTER_AUTH_URL"];
+const services = process.argv.includes("--services");
+const required = ["DATABASE_URL", "BETTER_AUTH_SECRET", "BACKEND_AUTH_SECRET", "APP_SETTINGS_ENCRYPTION_KEY", "NEXT_PUBLIC_APP_URL", "BETTER_AUTH_URL", ...(services ? ["BACKEND_DATABASE_URL", "REDIS_HOST", "REDIS_PASSWORD", "MEDIA_S3_BUCKET"] : ["NEXT_PUBLIC_API_URL"])];
 let errors = 0;
 for (const key of required) {
   const value = process.env[key]?.trim();
@@ -16,7 +17,7 @@ for (const key of required) {
 for (const key of ["BETTER_AUTH_SECRET", "BACKEND_AUTH_SECRET", "APP_SETTINGS_ENCRYPTION_KEY"]) {
   if (process.env[key] && process.env[key].length < 32) { console.error(`${key}: use pelo menos 32 caracteres.`); errors++; }
 }
-for (const key of ["NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_API_URL", "BETTER_AUTH_URL"]) {
+for (const key of ["NEXT_PUBLIC_APP_URL", "BETTER_AUTH_URL", ...(services ? [] : ["NEXT_PUBLIC_API_URL"])]) {
   try { if (new URL(process.env[key]).protocol !== "https:") throw new Error(); }
   catch { console.error(`${key}: use uma URL pública HTTPS válida.`); errors++; }
 }
