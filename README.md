@@ -62,6 +62,8 @@ O worker é um daemon de 2 GiB com uma instância em iad1. Os serviços em cont�
 
 ## Rodar tudo no seu computador
 
+Para usar este PC com NVIDIA, **sem contas em serviços de banco/armazenamento ou chaves de APIs de IA**, a configuração local reúne Whisper, Ollama, PostgreSQL e Redis no Docker. Após instalar os pré-requisitos, abra **`Iniciar-DGCLIPS.cmd`** e acesse `http://localhost:3117`. A instalação completa e o teste de vídeo ainda precisam ser realizados nesta máquina. Veja [DGCLIPS_LOCAL.md](docs/DGCLIPS_LOCAL.md) para os requisitos e o estado da avaliação.
+
 O `docker-compose.yml` original continua disponível. Copie o `.env.example` da raiz para `.env`, preencha as chaves de transcrição/IA e os segredos, e rode:
 
 ```bash

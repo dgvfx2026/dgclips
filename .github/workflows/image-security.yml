@@ -28,6 +28,10 @@ jobs:
             context: ./backend
             dockerfile: backend/Dockerfile
             options: --build-arg BACKEND_CPU_ONLY=true
+          - service: backend-local-gpu
+            context: ./backend
+            dockerfile: backend/Dockerfile
+            options: --build-arg BACKEND_CPU_ONLY=false
           - service: mcp
             context: ./mcp
             dockerfile: mcp/Dockerfile
@@ -55,3 +59,17 @@ jobs:
           --scanners vuln --severity CRITICAL --ignore-unfixed
           --exit-code 1 --timeout 15m
           supoclip-security:${{ matrix.service }}
+
+  local-ai:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Fetch the pinned local AI image
+        run: docker pull ollama/ollama:0.40.11
+      - name: Reject fixable critical vulnerabilities in local AI
+        run: >-
+          docker run --rm
+          --volume /var/run/docker.sock:/var/run/docker.sock
+          aquasec/trivy:0.76.1 image
+          --scanners vuln --severity CRITICAL --ignore-unfixed
+          --exit-code 1 --timeout 15m
+          ollama/ollama:0.40.11

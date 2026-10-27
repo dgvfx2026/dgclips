@@ -1,0 +1,203 @@
+# Personal workstation: local files, PostgreSQL, Redis, Whisper and Ollama.
+# Requires Docker Desktop with Linux containers, WSL 2 and NVIDIA GPU support.
+name: dgclips-local
+
+x-processing: &processing
+  image: dgclips-local-processor:local
+  build:
+    context: ./backend
+    args:
+      BACKEND_CPU_ONLY: "false"
+  environment: &processing-env
+    DATABASE_URL: postgresql+asyncpg://dgclips:${LOCAL_DATABASE_PASSWORD:?Run Iniciar-DGCLIPS.cmd first}@postgres:5432/dgclips
+    BACKEND_AUTH_SECRET: ${LOCAL_BACKEND_SECRET:?Run Iniciar-DGCLIPS.cmd first}
+    APP_SETTINGS_ENCRYPTION_KEY: ${LOCAL_SETTINGS_SECRET:?Run Iniciar-DGCLIPS.cmd first}
+    SELF_HOST: "true"
+    DGCLIPS_DEMO: "false"
+    MEDIA_STORAGE: local
+    TEMP_DIR: /app/uploads
+    OUTPUT_DIR: /app/clips
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+    REDIS_PASSWORD: ${LOCAL_REDIS_PASSWORD:?Run Iniciar-DGCLIPS.cmd first}
+    REDIS_SSL: "false"
+    TRANSCRIPTION_PROVIDER: whisper
+    WHISPER_MODEL: ${LOCAL_WHISPER_MODEL:-small}
+    LLM: ollama:${LOCAL_OLLAMA_MODEL:-qwen3:4b}
+    RERANK_LLM: ollama:${LOCAL_OLLAMA_MODEL:-qwen3:4b}
+    OLLAMA_BASE_URL: http://ollama:11434/v1
+    OLLAMA_API_KEY: ""
+    ASSEMBLY_AI_API_KEY: ""
+    OPENAI_API_KEY: ""
+    OPENROUTER_API_KEY: ""
+    GOOGLE_API_KEY: ""
+    ANTHROPIC_API_KEY: ""
+    APIFY_API_TOKEN: ""
+    APIFY_EXPENSIVE_FALLBACKS: "false"
+    POSTHOG_PROJECT_TOKEN: ""
+    WORKER_MAX_JOBS: "1"
+    MAX_CLIPS: "5"
+    FAST_MODE_MAX_CLIPS: "5"
+    CORS_ORIGINS: http://localhost:3117,http://127.0.0.1:3117
+    NEXT_PUBLIC_APP_URL: http://localhost:3117
+    PYTHONUNBUFFERED: "1"
+    PYTHONPATH: /app
+  volumes:
+    - uploads:/app/uploads
+    - clips:/app/clips
+    - whisper_models:/root/.cache/whisper
+  init: true
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: dgclips
+      POSTGRES_USER: dgclips
+      POSTGRES_PASSWORD: ${LOCAL_DATABASE_PASSWORD:?Run Iniciar-DGCLIPS.cmd first}
+    volumes: ["database:/var/lib/postgresql/data"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dgclips -d dgclips"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    environment:
+      REDIS_PASSWORD: ${LOCAL_REDIS_PASSWORD:?Run Iniciar-DGCLIPS.cmd first}
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes"]
+    volumes: ["queue:/data"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    image: dgclips-local-migrations:local
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: development
+    environment:
+      DATABASE_URL: postgresql://dgclips:${LOCAL_DATABASE_PASSWORD:?Run Iniciar-DGCLIPS.cmd first}@postgres:5432/dgclips
+    command: ["pnpm", "exec", "prisma", "migrate", "deploy"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  ollama:
+    image: ollama/ollama:0.40.11
+    gpus: all
+    environment:
+      OLLAMA_CONTEXT_LENGTH: "8192"
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_KEEP_ALIVE: 1m
+      OLLAMA_KV_CACHE_TYPE: q8_0
+    volumes: ["ollama_models:/root/.ollama"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+
+  ollama-model:
+    image: ollama/ollama:0.40.11
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama"]
+    command: ["pull", "${LOCAL_OLLAMA_MODEL:-qwen3:4b}"]
+    depends_on:
+      ollama: { condition: service_healthy }
+    restart: "no"
+
+  whisper-model:
+    <<: *processing
+    gpus: all
+    command: [".venv/bin/python", "-c", "import os, torch, whisper; assert torch.cuda.is_available(), 'NVIDIA GPU unavailable in Docker: check Docker Desktop WSL 2 GPU support'; whisper.load_model(os.environ['WHISPER_MODEL']); print('Local transcription model and NVIDIA GPU ready')"]
+    depends_on:
+      ollama-model: { condition: service_completed_successfully }
+    restart: "no"
+
+  backend:
+    <<: *processing
+    environment:
+      <<: *processing-env
+      SUPOCLIP_SERVICE: backend
+    ports: ["127.0.0.1:8117:8000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/db"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  worker:
+    <<: *processing
+    gpus: all
+    environment:
+      <<: *processing-env
+      SUPOCLIP_SERVICE: worker
+    command: [".venv/bin/arq", "src.workers.tasks.WorkerSettings"]
+    depends_on:
+      backend: { condition: service_healthy }
+      whisper-model: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", ".venv/bin/arq", "--check", "src.workers.tasks.WorkerSettings"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 45s
+
+  frontend:
+    image: dgclips-local-web:local
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: runner
+      args:
+        NEXT_PUBLIC_APP_URL: http://localhost:3117
+        NEXT_PUBLIC_API_URL: http://localhost:8117
+        NEXT_PUBLIC_SELF_HOST: "true"
+    environment:
+      DGCLIPS_DEMO: "false"
+      NEXT_PUBLIC_SELF_HOST: "true"
+      SELF_HOST: "true"
+      DATABASE_URL: postgresql://dgclips:${LOCAL_DATABASE_PASSWORD:?Run Iniciar-DGCLIPS.cmd first}@postgres:5432/dgclips
+      BETTER_AUTH_SECRET: ${LOCAL_AUTH_SECRET:?Run Iniciar-DGCLIPS.cmd first}
+      BACKEND_AUTH_SECRET: ${LOCAL_BACKEND_SECRET:?Run Iniciar-DGCLIPS.cmd first}
+      APP_SETTINGS_ENCRYPTION_KEY: ${LOCAL_SETTINGS_SECRET:?Run Iniciar-DGCLIPS.cmd first}
+      BACKEND_INTERNAL_URL: http://backend:8000
+      BETTER_AUTH_URL: http://localhost:3117
+      NEXT_PUBLIC_APP_URL: http://localhost:3117
+      NEXT_PUBLIC_API_URL: http://localhost:8117
+      DISABLE_SIGN_UP: ${LOCAL_DISABLE_SIGN_UP:-false}
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports: ["127.0.0.1:3117:3107"]
+    depends_on:
+      backend: { condition: service_healthy }
+      worker: { condition: service_healthy }
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3107/api/auth/get-session"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 45s
+
+volumes:
+  database:
+  queue:
+  uploads:
+  clips:
+  whisper_models:
+  ollama_models:
