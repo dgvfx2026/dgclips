@@ -5,6 +5,8 @@ import { auth } from "@/lib/auth";
 import { buildBackendAuthHeaders } from "@/lib/backend-auth";
 import { backendTraceHeaders } from "@/server/backend-api";
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.id) {

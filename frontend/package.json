@@ -1,6 +1,6 @@
 {
-  "name": "frontend",
-  "version": "0.1.0",
+  "name": "dgclips",
+  "version": "1.0.0",
   "private": true,
   "packageManager": "pnpm@10.27.0",
   "scripts": {
@@ -16,7 +16,9 @@
     "postinstall": "prisma generate",
     "typecheck": "prisma generate && tsc --noEmit",
     "test:polish": "playwright test --config playwright.polish.config.ts",
-    "test:local": "playwright test --config playwright.local.config.ts"
+    "test:local": "playwright test --config playwright.local.config.ts",
+    "check:deploy": "node scripts/check-deploy.mjs",
+    "test:studio": "playwright test --config playwright.dgclips.config.ts"
   },
   "dependencies": {
     "@posthog/nextjs-config": "^1.11.3",
@@ -90,5 +92,8 @@
       "picomatch@>=2 <3": "2.3.2",
       "source-map-js": "1.2.2"
     }
+  },
+  "engines": {
+    "node": ">=22 <25"
   }
 }

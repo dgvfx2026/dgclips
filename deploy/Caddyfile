@@ -1,0 +1,7 @@
+{$API_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy backend:8000 {
+        flush_interval -1
+    }
+    header X-Content-Type-Options nosniff
+}

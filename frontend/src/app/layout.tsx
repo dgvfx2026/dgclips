@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { NextIntlClientProvider } from "next-intl";
-import { getLocale, getMessages, getTranslations } from "next-intl/server";
+import { getLocale, getMessages } from "next-intl/server";
 import { Geist, Geist_Mono, Syne } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
@@ -11,7 +11,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { FeedbackButton } from "@/components/feedback-button";
 import { PostHogIdentity } from "@/components/posthog-identity";
 import { intlLocale } from "@/i18n/config";
-import { APP_STORE_ID, getSiteUrl } from "@/lib/site";
+import { getSiteUrl } from "@/lib/site";
+import { workspaceConfigured } from "@/lib/dgclips";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -36,51 +37,7 @@ const isDataFastEnabled = Boolean(dataFastWebsiteId && dataFastDomain);
 // Tilly analytics runs next to DataFast; it only uses its own cookies and window.tilly.
 const tillyWebsiteId = process.env.NEXT_PUBLIC_TILLY_WEBSITE_ID;
 
-export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations("metadata");
-
-  return {
-  title: {
-    default: t("title"),
-    template: t("titleTemplate"),
-  },
-  description: t("description"),
-  metadataBase: new URL(getSiteUrl()),
-  applicationName: "SupoClip",
-  authors: [{ name: "SupoClip Team", url: getSiteUrl() }],
-  creator: "SupoClip Team",
-  publisher: "SupoClip",
-  category: t("category"),
-  icons: {
-    icon: "/icon.png",
-  },
-  itunes: {
-    appId: APP_STORE_ID,
-  },
-  openGraph: {
-    title: t("title"),
-    description: t("openGraphDescription"),
-    siteName: "SupoClip",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: t("title"),
-    description: t("twitterDescription"),
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-      "max-video-preview": -1,
-    },
-  },
-  };
-}
+export async function generateMetadata(): Promise<Metadata> { return { title: { default: "DGCLIPS — Seu estúdio criativo", template: "%s | DGCLIPS" }, description: "Transforme vídeos longos em clipes com inteligência artificial. Seu conteúdo, sua identidade.", applicationName: "DGCLIPS", metadataBase: new URL(getSiteUrl()), icons: { icon: "/dgclips.svg" }, robots: { index: false, follow: false }, openGraph: { title: "DGCLIPS — Seu estúdio criativo", siteName: "DGCLIPS", type: "website" }, twitter: { card: "summary_large_image", title: "DGCLIPS — Seu estúdio criativo" } }; }
 
 export default async function RootLayout({
   children,
@@ -91,7 +48,7 @@ export default async function RootLayout({
   const messages = await getMessages();
 
   return (
-    <html lang={intlLocale(locale)}>
+    <html lang={intlLocale(locale)} className="dark">
       <head>
         {isDataFastEnabled ? (
           <>
@@ -134,10 +91,7 @@ export default async function RootLayout({
         <NextIntlClientProvider locale={locale} messages={messages}>
           <TooltipProvider>
             {children}
-            <DataFastIdentity />
-            <PostHogIdentity />
-            <AttributionTracker />
-            <FeedbackButton />
+            {workspaceConfigured() && <><DataFastIdentity /><PostHogIdentity /><AttributionTracker /><FeedbackButton /></>}
             <Toaster />
           </TooltipProvider>
         </NextIntlClientProvider>

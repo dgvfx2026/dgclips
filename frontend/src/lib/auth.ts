@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { randomBytes } from "node:crypto";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import prisma from "@/lib/prisma";
 import { nextCookies } from "better-auth/next-js";
@@ -35,6 +36,12 @@ const trustedOrigins = getAuthTrustedOrigins({
 });
 
 export const auth = betterAuth({
+  // Demo builds have no accounts or authentication endpoints. An ephemeral
+  // secret allows route compilation without embedding a production credential.
+  secret: process.env.BETTER_AUTH_SECRET ||
+    ((!process.env.DATABASE_URL || process.env.DGCLIPS_DEMO === "true") ? randomBytes(32).toString("hex") : undefined),
+  baseURL: process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3107"),
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),

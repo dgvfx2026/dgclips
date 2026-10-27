@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 @import "tw-shimmer";
 
+/* DGCLIPS also themes the original processing, authentication and editor screens. */
+
 
 @custom-variant dark (&:is(.dark *));
 
@@ -90,23 +92,23 @@
 }
 
 .dark {
-  --brand: oklch(0.7 0.19 42);
-  --brand-foreground: oklch(0.18 0.02 40);
-  --brand-soft: oklch(0.3 0.06 40);
-  --canvas: oklch(0.13 0.004 49.25);
-  --background: oklch(0.147 0.004 49.25);
-  --foreground: oklch(0.985 0.001 106.423);
-  --card: oklch(0.216 0.006 56.043);
+  --brand: #c3f85c;
+  --brand-foreground: #17210b;
+  --brand-soft: #303f22;
+  --canvas: #141614;
+  --background: #141614;
+  --foreground: #ecf2e5;
+  --card: #1b2117;
   --card-foreground: oklch(0.985 0.001 106.423);
-  --popover: oklch(0.216 0.006 56.043);
+  --popover: #1b2117;
   --popover-foreground: oklch(0.985 0.001 106.423);
-  --primary: oklch(0.923 0.003 48.717);
-  --primary-foreground: oklch(0.216 0.006 56.043);
-  --secondary: oklch(0.268 0.007 34.298);
+  --primary: #c3f85c;
+  --primary-foreground: #17210b;
+  --secondary: #26321d;
   --secondary-foreground: oklch(0.985 0.001 106.423);
-  --muted: oklch(0.268 0.007 34.298);
-  --muted-foreground: oklch(0.709 0.01 56.259);
-  --accent: oklch(0.268 0.007 34.298);
+  --muted: #26321d;
+  --muted-foreground: #9cae8b;
+  --accent: #303e23;
   --accent-foreground: oklch(0.985 0.001 106.423);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
@@ -117,7 +119,7 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.216 0.006 56.043);
+  --sidebar: #10120f;
   --sidebar-foreground: oklch(0.985 0.001 106.423);
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.985 0.001 106.423);

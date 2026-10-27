@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import { catalogKey, intlLocale, negotiateLocale } from "./config";
 
 describe("negotiateLocale", () => {
-  it("falls back to English when the header is missing", () => {
-    expect(negotiateLocale(null)).toBe("en");
-    expect(negotiateLocale("")).toBe("en");
+  it("falls back to Portuguese when the header is missing", () => {
+    expect(negotiateLocale(null)).toBe("pt");
+    expect(negotiateLocale("")).toBe("pt");
   });
 
   it("picks the highest-quality supported language", () => {

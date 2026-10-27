@@ -1,0 +1,93 @@
+# Vercel hosts frontend/. This stack hosts the API, worker and queue on Linux.
+# PostgreSQL and S3 are external; both the API and Vercel use the same database.
+name: dgclips
+
+x-processing: &processing
+  image: dgclips-processor:local
+  build:
+    context: ./backend
+    args:
+      BACKEND_CPU_ONLY: "true"
+  env_file: .env
+  environment: &processing-env
+    DATABASE_URL: ${BACKEND_DATABASE_URL:?Set BACKEND_DATABASE_URL in .env}
+    BACKEND_AUTH_SECRET: ${BACKEND_AUTH_SECRET:?Set BACKEND_AUTH_SECRET in .env}
+    APP_SETTINGS_ENCRYPTION_KEY: ${APP_SETTINGS_ENCRYPTION_KEY:?Set APP_SETTINGS_ENCRYPTION_KEY in .env}
+    SELF_HOST: "true"
+    MEDIA_STORAGE: s3
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+    REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    PYTHONUNBUFFERED: "1"
+    PYTHONPATH: /app
+  volumes:
+    - uploads:/app/uploads
+    - clips:/app/clips
+  restart: unless-stopped
+  init: true
+
+services:
+  backend:
+    <<: *processing
+    environment:
+      <<: *processing-env
+      SUPOCLIP_SERVICE: backend
+    expose: ["8000"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+  worker:
+    <<: *processing
+    environment:
+      <<: *processing-env
+      SUPOCLIP_SERVICE: worker
+    command: [".venv/bin/arq", "src.workers.tasks.WorkerSettings"]
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", ".venv/bin/arq", "--check", "src.workers.tasks.WorkerSettings"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+  redis:
+    image: redis:7-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes"]
+    volumes: ["redis_data:/data"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  caddy:
+    image: caddy:2.10.2-alpine
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?Set API_DOMAIN in .env}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  uploads:
+  clips:
+  redis_data:
+  caddy_data:
+  caddy_config:
