@@ -24,6 +24,10 @@ O Ollama roda dentro do Docker nesta configuração; não é necessário instala
 
 ## Iniciar
 
+Para a instalação no disco D:, clique com o botão direito em **`Instalar-DGCLIPS-no-D.cmd`** e escolha **Executar como administrador**. Ele copia o aplicativo para `D:\DGCLIPS\App`, verifica a assinatura digital do instalador oficial e configura Docker Desktop em `D:\DGCLIPS\DockerDesktop` e seu disco de dados em `D:\DGCLIPS\DockerData`. Os modelos e vídeos ficam nesse disco de dados. Componentes do Windows/WSL podem permanecer no C:. O instalador não aceita os termos nem reinicia o computador automaticamente; essas etapas ficam com o proprietário. Se já houver uma instalação em `D:\DGCLIPS\App`, seus arquivos são preservados.
+
+O D: tinha cerca de 343 GB livres na avaliação. A sessão do assistente não recebeu permissão para gravar nessa unidade, então a instalação precisa ser iniciada pelo proprietário pelo arquivo acima. Isso não indica uma falha do Docker ou do DGCLIPS.
+
 1. Instale e abra o Docker Desktop, com Linux containers e WSL 2.
 2. Na pasta do projeto, abra `Iniciar-DGCLIPS.cmd`.
 3. Aguarde a construção dos programas, a preparação do banco e os downloads dos modelos.

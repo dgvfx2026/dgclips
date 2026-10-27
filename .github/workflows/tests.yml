@@ -7,6 +7,18 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  local-config:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --check scripts/local-start.mjs
+      - run: node --check scripts/install-local-windows.mjs
+      - run: node scripts/install-local-windows.mjs --help
+      - run: node scripts/local-start.mjs --prepare
+      - run: docker compose --env-file .env.dgclips-local --file docker-compose.local.yml config --quiet
   backend:
     runs-on: ubuntu-24.04
     services:
