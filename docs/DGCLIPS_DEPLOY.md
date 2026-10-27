@@ -31,6 +31,8 @@ NEXT_PUBLIC_SOURCE_URL=https://github.com/dgvfx2026/dgclips
 
 A interface abre com exemplos identificados. O backend responde que a configuração está pendente e o worker aguarda sem consumir a fila. O login e o processamento real ficam desativados. Os contêineres ainda precisam ser construídos no deploy.
 
+Se você colar um vídeo e chegar à tela de configuração, o processamento ainda não foi ativado. O formulário explica o bloqueio antes da navegação e preserva o link apenas na sessão desta aba. A opção de explorar exemplos é independente: ela não processa o link informado. Publicar o site não cria automaticamente as contas de banco, armazenamento, fila ou IA. Esses serviços precisam ser conectados pelo proprietário e podem ter custos de uso.
+
 O worker confirmado usa uma instância de **2 GiB em `iad1`**. Daemons só executam em produção e usam as cotas/recursos do plano. Para deixar uma demonstração sem instância de worker, altere temporariamente `instances.iad1` para `0`. [Limites dos daemons](https://vercel.com/docs/daemons/limits).
 
 ## Configurar os serviços externos

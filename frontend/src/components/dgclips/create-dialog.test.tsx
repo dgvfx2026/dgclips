@@ -2,9 +2,19 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CreateDialog } from "./create-dialog";
 
-const props = { open: true, onOpenChange: vi.fn(), initialUrl: "https://youtu.be/abcdefghijk", template: "hormozi", onDemo: vi.fn() };
+const props = { open: true, onOpenChange: vi.fn(), initialUrl: "https://youtu.be/abcdefghijk", template: "hormozi", onDemo: vi.fn(), onSetup: vi.fn() };
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 describe("DGCLIPS project creation", () => {
+  it("explains why processing is unavailable and keeps the edited link for setup", () => {
+    const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
+    render(<CreateDialog {...props} demo />);
+    expect(screen.getByRole("status")).toHaveTextContent("Seu vídeo não será enviado nem processado");
+    fireEvent.change(screen.getByRole("textbox", { name: /Link do vídeo/ }), { target: { value: "https://youtu.be/new-video-id" } });
+    fireEvent.click(screen.getByRole("button", { name: "Configurar processamento" }));
+    expect(props.onSetup).toHaveBeenCalledWith("https://youtu.be/new-video-id");
+    expect(props.onDemo).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it("makes demo status explicit and never submits a processing request", () => {
     const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
     render(<CreateDialog {...props} demo />);

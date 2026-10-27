@@ -27,6 +27,24 @@ test("demo creation is explicit and opens a playable example", async ({ page }) 
   await expect(page.locator("video source")).toHaveAttribute("src", "/clips/podcast-1.mp4");
   expect(processingRequests).toHaveLength(0);
 });
+test("an unconfigured studio explains the block and preserves the submitted link", async ({ page }) => {
+  const requests: string[] = [];
+  page.on("request", (request) => { if (request.url().includes("/api/tasks/create")) requests.push(request.url()); });
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "Link do vídeo", exact: true }).fill("https://youtu.be/abcdefghijk");
+  await page.getByRole("button", { name: "Criar clipes", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "O processamento ainda não está ativado" })).toBeVisible();
+  await page.getByRole("button", { name: "Configurar processamento", exact: true }).click();
+  await expect(page).toHaveURL(/\/workspace\/settings$/);
+  await expect(page.getByRole("heading", { name: "Seu vídeo ainda não foi enviado" })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Link preservado nesta aba" })).toHaveValue("https://youtu.be/abcdefghijk");
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Link preservado nesta aba" })).toHaveValue("https://youtu.be/abcdefghijk");
+  await page.getByRole("link", { name: "Voltar para meu vídeo" }).click();
+  await expect(page.getByRole("textbox", { name: "Link do vídeo", exact: true })).toHaveValue("https://youtu.be/abcdefghijk");
+  await expect(page.locator("video")).toHaveCount(0);
+  expect(requests).toHaveLength(0);
+});
 test("caption preference survives navigation", async ({ page }) => {
   await page.goto("/templates");
   await page.locator("article").filter({ hasText: "Impacto" }).getByRole("button", { name: "Usar estilo" }).click();
