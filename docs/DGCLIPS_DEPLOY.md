@@ -89,3 +89,7 @@ O ambiente de entrega não tem Docker nem suas credenciais de produção. A conf
 ## Alternativa com servidor próprio
 
 O `docker-compose.production.yml` continua disponível para rodar API/worker/Redis em um servidor próprio. Nesse caso, consulte [DGCLIPS_DOCKER_DEPLOY.md](DGCLIPS_DOCKER_DEPLOY.md) e publique somente a interface como projeto Next.js separado. Não misture as duas configurações de deploy.
+
+## Erro de publicação nas imagens de compartilhamento
+
+Se a Vercel informar `Service "frontend" declares service bindings, but function "opengraph-image" cannot run on Functions on Hive`, a causa é uma função Edge no serviço que usa bindings privados. As rotas `opengraph-image` e `twitter-image` usam explicitamente `runtime = "nodejs"`. O build também verifica o manifesto gerado pelo Next.js para impedir que novas funções Edge reintroduzam o problema. Faça o deploy do commit corrigido; alterar banco ou chaves não resolve essa incompatibilidade.
