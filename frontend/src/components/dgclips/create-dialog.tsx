@@ -7,10 +7,11 @@ import { parseApiError, formatSupportMessage } from "@/lib/api-error";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import type { StudioUser } from "./workspace";
 
-export function CreateDialog({ open, onOpenChange, demo, user, initialUrl, template, onDemo, onSetup, desktop = false, initialTab = "link" }: {
+export type CreateDialogProps = {
   open: boolean; onOpenChange: (value: boolean) => void; demo: boolean; user?: StudioUser;
   initialUrl: string; template: string; onDemo: () => void; onSetup: (sourceUrl: string) => void; desktop?: boolean; initialTab?: "link" | "upload";
-}) {
+};
+export function CreateDialog({ open, onOpenChange, demo, user, initialUrl, template, onDemo, onSetup, desktop = false, initialTab = "link" }: CreateDialogProps) {
   const [url, setUrl] = useState(initialUrl);
   const [tab, setTab] = useState("link");
   const [file, setFile] = useState<File | null>(null);

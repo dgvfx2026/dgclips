@@ -27,6 +27,7 @@ def main():
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--self-check", type=Path, help="Write an offline packaging diagnostic")
     parser.add_argument("--test-video", type=Path, help="Process a local fixture during a packaging diagnostic")
+    parser.add_argument("--test-editorial", action="store_true", help="Check the private editorial runtime (downloads its model if absent)")
     args = parser.parse_args()
     asset_root = args.resources or resources()
     if args.self_check:
@@ -36,16 +37,32 @@ def main():
         import yt_dlp
         import yt_dlp_ejs
         import webview
+        import cv2
+        from captions import PRESETS
         from faster_whisper import WhisperModel
-        model = WhisperModel(str(asset_root / "models/whisper-small"), device="cpu", compute_type="int8", local_files_only=True)
+        voice = json.loads((asset_root / 'model-manifest.json').read_text(encoding='utf-8'))
+        model = WhisperModel(str(asset_root / 'models' / voice['directory']), device="cpu", compute_type="int8", local_files_only=True)
         report = {"ok": True, "model_loaded": bool(model), "av": av.__version__, "ctranslate2": ctranslate2.__version__, "webview_imported": bool(webview), "youtube_solver": bool(yt_dlp_ejs)}
+        report.update(opencv=cv2.__version__, caption_styles=len(PRESETS), face_model=(asset_root / 'models/face/yunet.onnx').is_file())
+        if args.test_editorial:
+            from editorial_runtime import EditorialRuntime
+            runtime = EditorialRuntime(args.self_check.resolve().parent / 'frozen-media-test', asset_root)
+            try:
+                runtime.start(lambda *_: None, lambda: None)
+                answer = runtime.chat('Responda somente o JSON solicitado.', 'Quanto é 2 + 3? Retorne a soma em total.', {'type': 'object', 'properties': {'total': {'type': 'integer'}}, 'required': ['total'], 'additionalProperties': False}, lambda: None, max_tokens=60)
+                if answer.get('total') != 5:
+                    raise RuntimeError('Editorial runtime returned an invalid diagnostic answer')
+                report['editorial_test'] = {'ok': True, 'acceleration': runtime.acceleration}
+            finally:
+                runtime.close()
         if args.test_video:
             import time
             test_engine = Engine(args.self_check.resolve().parent / "frozen-media-test", asset_root)
             test_engine.model = model
             source = test_engine.uploads / "fixture.mp4"
             shutil.copy2(args.test_video, source)
-            job_id = test_engine.create({"source": {"url": "local-upload:fixture.mp4", "title": "Teste do executável"}, "output_format": "vertical_fit", "clip_length": "short", "add_subtitles": True})
+            # Mechanical media diagnostic; real semantic selection is tested separately on a full video.
+            job_id = test_engine.create({"source": {"url": "local-upload:fixture.mp4", "title": "Teste do executável"}, "layout": "fill", "clip_length": "short", "clip_count": 1, "selection_mode": "rules", "caption_template": "reels", "add_subtitles": True})
             deadline = time.monotonic() + 180
             while test_engine.get(job_id)["status"] in {"queued", "processing"} and time.monotonic() < deadline:
                 time.sleep(0.5)

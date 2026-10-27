@@ -13,6 +13,9 @@ from PIL import Image, ImageDraw
 root = Path(__file__).resolve().parent
 licenses = root / 'licenses'
 licenses.mkdir(exist_ok=True)
+shutil.copytree(root / 'third-party-licenses', licenses / 'editorial', dirs_exist_ok=True)
+for notice in (root / 'tools/llama').glob('LICENSE*'):
+    shutil.copy2(notice, licenses / 'editorial' / notice.name)
 manifest = []
 for distribution in importlib.metadata.distributions():
     name = distribution.metadata.get('Name') or 'unknown'

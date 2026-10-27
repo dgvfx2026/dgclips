@@ -25,6 +25,7 @@ imageio-ffmpeg==0.6.0
 mutagen==1.48.1
 numpy==2.5.4
 onnxruntime==1.31.1
+opencv-python-headless==4.13.0.92
 packaging==26.3
 pefile==2024.8.26
 pillow==13.0.0

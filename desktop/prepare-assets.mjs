@@ -2,15 +2,20 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 
 const desktop = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.dirname(desktop);
-const modelRevision = "536b0662742c02347bc0e980a01041f333bce120";
-const modelHash = "3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671";
+const model = JSON.parse(await fs.readFile(path.join(desktop,"model-manifest.json"),"utf8"));
 async function download(url, destination, expectedHash) {
   try {
-    const present = await fs.readFile(destination);
-    if (!expectedHash || createHash("sha256").update(present).digest("hex") === expectedHash) return;
+    const present = await fs.stat(destination);
+    if (present.isFile()) {
+      if (!expectedHash) return;
+      const hash = createHash("sha256");
+      for await (const chunk of createReadStream(destination)) hash.update(chunk);
+      if (hash.digest("hex") === expectedHash) return;
+    }
   } catch { /* Download absent or incomplete build assets. */ }
   await fs.mkdir(path.dirname(destination), { recursive: true });
   const response = await fetch(url);
@@ -32,7 +37,7 @@ async function download(url, destination, expectedHash) {
   console.log(`Ready: ${path.basename(destination)}`);
 }
 const uiOnly = process.argv.includes("--ui-only");
-if (!uiOnly) await Promise.all(["config.json", "model.bin", "tokenizer.json", "vocabulary.txt"].map(name => download(`https://huggingface.co/Systran/faster-whisper-small/resolve/${modelRevision}/${name}`, path.join(desktop, "models/whisper-small", name), name === "model.bin" ? modelHash : undefined)));
+if (!uiOnly) await Promise.all(Object.entries(model.files).map(([name,hash]) => download(`https://huggingface.co/${model.repository}/resolve/${model.revision}/${name}`, path.join(desktop, "models",model.directory,name),hash)));
 const publicDir = path.join(desktop, "ui/public");
 await fs.mkdir(publicDir, { recursive: true });
 await fs.copyFile(path.join(repo, "frontend/public/dgclips.svg"), path.join(publicDir, "dgclips.svg"));
@@ -42,9 +47,9 @@ await fs.mkdir(path.join(publicDir, "fonts"), { recursive: true });
 for (const name of ["Geist", "Syne"]) {
   await fs.copyFile(path.join(desktop, "fonts", name + ".woff2"), path.join(publicDir, "fonts", name + ".woff2"));
 }
+for (const [source,name] of [['Manrope[wght].ttf','Manrope.ttf'],['Montserrat[wght].ttf','Montserrat.ttf'],['Anton-Regular.ttf','Anton-Regular.ttf'],['Lora[wght].ttf','Lora.ttf']]) await fs.copyFile(path.join(desktop,'fonts',source),path.join(publicDir,'fonts',name));
 if (!uiOnly) {
   await fs.mkdir(path.join(desktop, "tools"), { recursive: true });
   await fs.copyFile(process.execPath, path.join(desktop, "tools/node.exe"));
-  await fs.writeFile(path.join(desktop, "model-manifest.json"), JSON.stringify({ repository: "Systran/faster-whisper-small", revision: modelRevision, sha256: modelHash }, null, 2));
 }
-console.log(uiOnly ? "Desktop UI assets ready." : "Desktop assets ready. No model download is needed at runtime.");
+console.log(uiOnly ? "Desktop UI assets ready." : "Desktop assets ready. The voice model is bundled; editorial weights are prepared on first use.");

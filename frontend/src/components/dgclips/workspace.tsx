@@ -12,7 +12,7 @@ import { filterProjects, normalizeProject, sampleProjects, type StudioProject } 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CreateDialog } from "./create-dialog";
+import { CreateDialog, type CreateDialogProps } from "./create-dialog";
 import { Guide, Settings, TemplateGallery, WorkflowPreview } from "./workspace-panels";
 import { GlassMotion, NumberTicker } from "./glass-motion";
 
@@ -26,7 +26,7 @@ const nav = [
   { id: "templates", href: "/templates", icon: Captions, label: "Estilos de legenda" },
 ] as const;
 
-type RuntimePanels = { desktop?: boolean; settingsPanel?: React.ReactNode; guidePanel?: React.ReactNode; workflowPanel?: React.ReactNode; quickCreate?: (url: string, template: string) => Promise<void> };
+type RuntimePanels = { desktop?: boolean; settingsPanel?: React.ReactNode; guidePanel?: React.ReactNode; workflowPanel?: React.ReactNode; templatePanel?: React.ReactNode; quickCreate?: (url: string, template: string) => Promise<void>; renderCreateDialog?: (props: CreateDialogProps) => React.ReactNode };
 export function Workspace({ view, configured, ...panels }: { view: View; configured: boolean } & RuntimePanels) {
   return configured ? <ConnectedWorkspace view={view} {...panels} /> : <Studio view={view} demo {...panels} />;
 }
@@ -35,7 +35,7 @@ function ConnectedWorkspace({ view, ...panels }: { view: View } & RuntimePanels)
   return <Studio view={view} demo={false} user={session?.user} sessionPending={isPending} {...panels} />;
 }
 
-function Studio({ view, demo, user, sessionPending, desktop, settingsPanel, guidePanel, workflowPanel, quickCreate }: { view: View; demo: boolean; user?: StudioUser; sessionPending?: boolean } & RuntimePanels) {
+function Studio({ view, demo, user, sessionPending, desktop, settingsPanel, guidePanel, workflowPanel, templatePanel, quickCreate, renderCreateDialog }: { view: View; demo: boolean; user?: StudioUser; sessionPending?: boolean } & RuntimePanels) {
   const router = useRouter();
   const [projects, setProjects] = useState<StudioProject[]>(demo ? sampleProjects : []);
   const [loading, setLoading] = useState(false);
@@ -117,6 +117,7 @@ function Studio({ view, demo, user, sessionPending, desktop, settingsPanel, guid
     return () => window.removeEventListener("keydown", handler);
   }, [create]);
 
+  const creationProps: CreateDialogProps = { open: newOpen, onOpenChange: setNewOpen, demo, user, initialUrl: url, template, desktop, initialTab: sourceTab, onSetup: configureProcessing, onDemo: () => { setNewOpen(false); setPreview(sampleProjects[0]); } };
   return <div className="dg-studio">
     <GlassMotion view={view} />
     <a className="dg-skip" href="#studio-content">Ir para o conteúdo</a>
@@ -145,13 +146,13 @@ function Studio({ view, demo, user, sessionPending, desktop, settingsPanel, guid
         </section>}
         {view === "dashboard" && (workflowPanel || <WorkflowPreview />)}
         {view === "dashboard" && <Link className="dg-bottom-banner" href="/templates"><span className="dg-bottom-icon"><Captions size={21} /></span><div><h3>Seu conteúdo. Sua personalidade.</h3><p>Encontre o estilo de legenda que combina com a sua marca.</p></div><span>Explorar estilos <ArrowUpRight size={16} /></span></Link>}
-        {view === "templates" && <TemplateGallery template={template} chooseTemplate={chooseTemplate} />}
+        {view === "templates" && (templatePanel || <TemplateGallery template={template} chooseTemplate={chooseTemplate} />)}
         {view === "guide" && (guidePanel || <Guide create={create} />)}
         {view === "setup" && (settingsPanel || <Settings demo={demo} user={user} pendingUrl={url} onSignOut={async () => { await signOut(); window.location.assign("/"); }} />)}
         <footer className="dg-footer"><span>DGCLIPS <i>STUDIO</i><b>·</b> Menos edição. Mais criação.{<a href={process.env.NEXT_PUBLIC_SOURCE_URL || "https://github.com/dgvfx2026/dgclips"} target="_blank" rel="noreferrer"> · Código-fonte ↗</a>}</span><span>{demo ? "Você está explorando uma demonstração" : "Seu conteúdo, sob seu controle."}<span className="dg-footer-dot" /></span></footer>
       </main>
     </div>
-    <CreateDialog open={newOpen} onOpenChange={setNewOpen} demo={demo} user={user} initialUrl={url} template={template} desktop={desktop} initialTab={sourceTab} onSetup={configureProcessing} onDemo={() => { setNewOpen(false); setPreview(sampleProjects[0]); }} />
+    {renderCreateDialog ? renderCreateDialog(creationProps) : <CreateDialog {...creationProps} />}
     <Dialog open={!!preview} onOpenChange={(open) => { if (!open) setPreview(null); }}><DialogContent className="dg-preview-dialog"><DialogTitle>{preview?.title}</DialogTitle><DialogDescription>Prévia demonstrativa do motor SupoClip. O conteúdo original está em inglês; os títulos da biblioteca são ilustrativos.</DialogDescription>{preview && <video controls playsInline preload="metadata" poster="/clips/podcast-1.jpg" key={preview.id}><source src={preview.id === "demo-creative" ? "/clips/podcast-2.mp4" : "/clips/podcast-1.mp4"} type="video/mp4" /><track kind="captions" /></video>}<Link href="/workspace/settings" className="dg-button dg-primary">Conectar meus próprios vídeos <ArrowRight size={16} /></Link></DialogContent></Dialog>
   </div>;
 }

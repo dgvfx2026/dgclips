@@ -8,6 +8,8 @@
 
 A edição **DGCLIPS Desktop** reúne interface e processamento local em um instalador, com modelo de voz incluído, sem Docker nem contas externas. Instale, abra pelo atalho, cole um link ou escolha um vídeo e salve os cortes. O instalador permite escolher o disco D:.
 
+Na versão **1.2**, escolha até 50 clipes, foco editorial, 9 estilos de legenda e layouts verticais para react. A IA local seleciona e revisa trechos pela transcrição; seu modelo é baixado automaticamente no primeiro uso (2,5 GB). Os resultados precisam de revisão e não garantem viralização.
+
 [Instruções e detalhes da edição Windows](desktop/README.md). O processamento nesta edição é independente do backend web; os recursos e limites estão descritos no guia.
 
 Adaptação do [SupoClip](https://github.com/FujiwaraChoki/supoclip). O motor original de transcrição, seleção de trechos, legendagem, reenquadramento e edição foi preservado. Licença AGPL-3.0 em [LICENSE](LICENSE); procedência em [NOTICE.md](NOTICE.md).

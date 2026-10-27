@@ -13,6 +13,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from engine import Engine, MAX_BYTES
+from captions import PRESETS
+from studio_options import DEFAULTS, validate_options
 
 
 class DesktopServer(ThreadingHTTPServer):
@@ -124,7 +126,27 @@ class Handler(BaseHTTPRequestHandler):
             if path in {"/api/tasks", "/api/tasks/"}:
                 return self._json({"tasks": self.server.engine.list()})
             if path == "/api/desktop/status":
-                return self._json({"version": "1.1.0", "data_dir": str(self.server.engine.data), "model": "Whisper small · CPU local", "model_ready": (self.server.engine.resources / "models/whisper-small/model.bin").is_file(), "free_gb": round(shutil.disk_usage(self.server.engine.data).free / 1e9, 1), "selection": "Sugestões por transcrição, densidade de fala e frases completas"})
+                return self._json({"version": "1.2.0", "data_dir": str(self.server.engine.data), "model": self.server.engine.voice["name"] + " · CPU local", "model_ready": (self.server.engine.voice_model_path / "model.bin").is_file(), "editorial_ready": self.server.engine.editorial.ready(), "editorial_model": self.server.engine.editorial.assets['model']['name'], "free_gb": round(shutil.disk_usage(self.server.engine.data).free / 1e9, 1), "selection": "IA local · contexto, gancho, humor e conclusão"})
+            if path == '/api/desktop/catalog':
+                return self._json({'captions': PRESETS, 'defaults': DEFAULTS})
+            if path == '/api/desktop/sources':
+                ready = [self.server.engine.sources.get(key) for key, source in list(self.server.engine.sources.records.items()) if source['status'] == 'ready']
+                return self._json({'sources': ready[-30:][::-1]})
+            if path == '/api/desktop/preferences':
+                preference_file = self.server.engine.data / 'studio-preferences.json'
+                try:
+                    preferences = validate_options(json.loads(preference_file.read_text(encoding='utf-8')))
+                except (ValueError, OSError):
+                    preferences = dict(DEFAULTS)
+                return self._json(preferences)
+            match = re.fullmatch(r'/api/desktop/sources/([a-f0-9]{32})(/frame)?', path)
+            if match:
+                source = self.server.engine.sources.get(match[1])
+                if match[2]:
+                    if source['status'] != 'ready':
+                        return self._json({'error': 'A prévia ainda está sendo preparada.'}, 409)
+                    return self._file(self.server.engine.sources.root / source['id'] / 'preview.jpg')
+                return self._json(source)
             match = re.fullmatch(r"/api/tasks/([a-f0-9]{32})", path)
             if match:
                 return self._json(self.server.engine.get(match[1]))
@@ -191,6 +213,24 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Solicitação inválida.")
             if parsed.path == "/api/tasks/create":
                 return self._json({"task_id": self.server.engine.create(body)}, 201)
+            if parsed.path == '/api/desktop/preferences':
+                preferences = validate_options({key: value for key, value in body.items() if key in DEFAULTS})
+                path = self.server.engine.data / 'studio-preferences.json'
+                with self.server.engine.lock:
+                    temporary = path.with_suffix('.tmp')
+                    temporary.write_text(json.dumps(preferences, ensure_ascii=False, indent=2), encoding='utf-8')
+                    temporary.replace(path)
+                return self._json(preferences)
+            if parsed.path == '/api/desktop/sources':
+                source_url = str(body.get('url', '')).strip()
+                if not source_url.startswith('local-upload:'):
+                    from engine import validate_url
+                    validate_url(source_url)
+                return self._json({'source_id': self.server.engine.sources.create(source_url, str(body.get('title') or ''))}, 202)
+            match = re.fullmatch(r'/api/desktop/sources/([a-f0-9]{32})/cancel', parsed.path)
+            if match:
+                self.server.engine.sources.cancel(match[1])
+                return self._json({'ok': True})
             match = re.fullmatch(r"/api/tasks/([a-f0-9]{32})/(cancel|retry)", parsed.path)
             if match:
                 if match[2] == "cancel":

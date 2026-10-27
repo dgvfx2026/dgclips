@@ -15,7 +15,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
-from clipping import make_ass, suggest_clips
+from clipping import suggest_clips
+from captions import make_captions
+from editorial import select_moments
+from editorial_runtime import EditorialRuntime
+from downloading import download_video
+from sources import Sources
+from studio_options import validate_options
+from reframing import filter_plan, probe
 
 LOG = logging.getLogger("dgclips")
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
@@ -41,6 +48,7 @@ class Engine:
     def __init__(self, data: Path, resources: Path):
         self.data = data.resolve()
         self.resources = resources.resolve()
+        self.voice = json.loads((self.resources / 'model-manifest.json').read_text(encoding='utf-8'))
         self.jobs_dir = self.data / "Projetos"
         self.uploads = self.data / "Entradas"
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
@@ -52,6 +60,9 @@ class Engine:
         self.stopping = threading.Event()
         self.model = None
         self.process = None
+        self.active_id = None
+        self.editorial = EditorialRuntime(self.data, self.resources)
+        self.sources = Sources(self.data, self.resources, self.uploads, self._download_source)
         for state in self.jobs_dir.glob("*/project.json"):
             try:
                 job = json.loads(state.read_text(encoding="utf-8"))
@@ -62,6 +73,18 @@ class Engine:
                 LOG.exception("Could not load project %s", state.name)
         self.worker = threading.Thread(target=self._worker, name="DGCLIPS-processor", daemon=True)
         self.worker.start()
+        for job in sorted(self.jobs.values(), key=lambda item: item['created_at'], reverse=True)[:10]:
+            if job['status'] != 'completed' or job['source_url'].startswith('prepared:'):
+                continue
+            folder = self.jobs_dir / job['id']
+            transcript = folder / 'transcript.json'
+            video = self.uploads / job['source_url'].removeprefix('local-upload:') if job['source_type'] == 'upload' else folder / 'source.mp4'
+            if video.is_file() and transcript.is_file() and video.resolve().is_relative_to(self.data):
+                self.sources.import_project(job, video, transcript)
+
+    @property
+    def voice_model_path(self) -> Path:
+        return self.resources / 'models' / self.voice['directory']
 
     @property
     def ffmpeg(self) -> str:
@@ -94,9 +117,20 @@ class Engine:
             return json.loads(json.dumps(self.jobs[job_id]))
 
     def create(self, options: dict) -> str:
+        options = validate_options(options)
         source = options.get("source", {})
+        if not isinstance(source, dict):
+            raise ValueError("Adicione um vídeo válido.")
         value = str(source.get("url", "")).strip()
-        if value.startswith("local-upload:"):
+        if value.startswith("prepared:"):
+            prepared = self.sources.get(value.removeprefix("prepared:"), private=True)
+            if prepared['status'] != 'ready' or not Path(prepared['path']).is_file():
+                raise ValueError('Prepare a prévia do vídeo novamente.')
+            source_type = 'upload' if prepared.get('url', '').startswith('local-upload:') else 'link'
+            source['title'] = prepared['title']
+            if options['layout'].startswith('react_') and not options.get('camera_rect'):
+                options['camera_rect'] = prepared.get('camera_rect')
+        elif value.startswith("local-upload:"):
             name = value.removeprefix("local-upload:")
             path = (self.uploads / name).resolve()
             if path.parent != self.uploads or not path.is_file():
@@ -105,10 +139,7 @@ class Engine:
         else:
             validate_url(value)
             source_type = "link"
-        if options.get("output_format", "vertical") not in {"vertical", "vertical_fit", "original"}:
-            raise ValueError("Formato de vídeo inválido.")
-        if options.get("clip_length", "auto") not in {"auto", "short", "medium", "long"}:
-            raise ValueError("Duração de clipe inválida.")
+        options = validate_options(options, require_camera=True)
         with self.lock:
             if sum(j["status"] in {"queued", "processing"} for j in self.jobs.values()) >= 5:
                 raise ValueError("Já há cinco vídeos na fila. Aguarde um terminar.")
@@ -132,6 +163,8 @@ class Engine:
                 self.events[job_id].set()
                 if self.process and self.process[0] == job_id:
                     self.process[1].terminate()
+                if self.active_id == job_id:
+                    self.editorial.close()
                 self.update(job, stage="Cancelando…")
 
     def retry(self, job_id: str) -> str:
@@ -150,6 +183,7 @@ class Engine:
             if job_id is None:
                 break
             job = self.jobs[job_id]
+            self.active_id = job_id
             try:
                 self._check(job)
                 self.update(job, status="processing", stage="Preparando seu vídeo", progress=2, error=None)
@@ -164,6 +198,10 @@ class Engine:
                     LOG.exception("Project failed %s", job_id)
                     self.update(job, status="failed", stage="Não consegui concluir este vídeo", error=self._friendly_error(cause))
 
+            finally:
+                self.editorial.close()
+                self.active_id = None
+
     @staticmethod
     def _friendly_error(cause: Exception) -> str:
         raw = str(cause)
@@ -177,43 +215,16 @@ class Engine:
             return "O disco ficou sem espaço. Libere espaço e tente novamente."
         return "Não consegui processar este vídeo. Tente um arquivo MP4 com áudio. Os detalhes estão no registro do programa, em Configurações."
 
+    def _download_source(self, url, folder, progress, check):
+        return download_video(url, folder, self.ffmpeg, self.resources / 'tools/node.exe', progress, check)
+
     def _download(self, job: dict, folder: Path) -> Path:
-        from yt_dlp import YoutubeDL
-        self.update(job, stage="Baixando seu vídeo", progress=3)
-
-        def progress(data: dict):
-            self._check(job)
-            if data.get("status") == "downloading":
-                total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
-                done = data.get("downloaded_bytes", 0)
-                if done > MAX_BYTES:
-                    raise ValueError("O vídeo ultrapassou o limite de 8 GB. Escolha um vídeo menor.")
-                self.update(job, progress=min(20, 3 + int(17 * done / total)) if total else 5)
-
-        node = self.resources / "tools" / "node.exe"
-        options = {"format": "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/b[height<=1080]", "outtmpl": str(folder / "source.%(ext)s"), "ffmpeg_location": self.ffmpeg, "merge_output_format": "mp4", "noplaylist": True, "max_filesize": MAX_BYTES, "socket_timeout": 30, "retries": 3, "quiet": True, "no_warnings": True, "progress_hooks": [progress], "windowsfilenames": True, "overwrites": False}
-        if node.is_file():
-            options["js_runtimes"] = {"node": {"path": str(node)}}
-        def allowed(info, *, incomplete=False):
-            self._check(job)
-            if info.get("is_live") or info.get("live_status") in {"is_live", "is_upcoming"}:
-                return "Transmissões ao vivo não são suportadas. Use um vídeo gravado."
-            if (info.get("duration") or 0) > MAX_SECONDS:
-                return "Escolha um vídeo de até quatro horas."
-            return None
-        options["match_filter"] = allowed
-        with YoutubeDL(options) as downloader:
-            info = downloader.extract_info(job["source_url"], download=True)
-            if not info:
-                raise ValueError("Não consegui baixar este vídeo. Escolha um vídeo gravado de até quatro horas.")
-            self.update(job, source_title=str(info.get("title") or "Vídeo por link")[:500])
-            path = Path(info.get("requested_downloads", [{}])[0].get("filepath") or downloader.prepare_filename(info))
-        if not path.is_file():
-            candidates = [p for p in folder.glob("source.*") if p.suffix in {".mp4", ".mkv", ".webm", ".mov"}]
-            if not candidates:
-                raise ValueError("O download não gerou um vídeo completo. Tente enviar o arquivo.")
-            path = candidates[0]
-        return path
+        def progress(stage, percent, title=None):
+            values = {'stage': stage, 'progress': 3 + int(percent * .17)}
+            if title:
+                values['source_title'] = title
+            self.update(job, **values)
+        return self._download_source(job['source_url'], folder, progress, lambda: self._check(job))
 
     def _ffmpeg(self, job: dict, args: list[str], folder: Path, timeout: int = 3600):
         self._check(job)
@@ -241,73 +252,95 @@ class Engine:
                 self.process = None
 
     def _run(self, job: dict):
-        import av
-        folder = self.jobs_dir / job["id"]
-        video = self.uploads / job["source_url"].removeprefix("local-upload:") if job["source_type"] == "upload" else self._download(job, folder)
-        self._check(job)
-        with av.open(str(video)) as media:
-            if not media.streams.video or not media.streams.audio:
-                raise ValueError("Este arquivo precisa ter imagem e áudio. Escolha um vídeo com voz audível.")
-            stream = media.streams.video[0]
-            width, height = stream.width, stream.height
-            duration = float(media.duration / av.time_base) if media.duration else float(stream.duration * stream.time_base) if stream.duration else 0
-        if duration < 3 or duration > MAX_SECONDS:
-            raise ValueError("Escolha um vídeo entre três segundos e quatro horas.")
-        if shutil.disk_usage(self.data).free < max(1_000_000_000, video.stat().st_size // 2):
-            raise ValueError("Não há espaço suficiente no disco para criar os clipes. Libere pelo menos 1 GB.")
-        self.update(job, duration=duration, stage="Preparando o áudio", progress=22)
-        audio = folder / "audio.wav"
-        self._ffmpeg(job, ["-i", str(video), "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(audio)], folder)
-        if self.model is None:
-            self.update(job, stage="Carregando a transcrição local", progress=25)
-            from faster_whisper import WhisperModel
-            model_path = self.resources / "models" / "whisper-small"
-            if not (model_path / "model.bin").is_file():
-                raise ValueError("O modelo de voz está ausente. Use o executável completo do DGCLIPS.")
-            self.model = WhisperModel(str(model_path), device="cpu", compute_type="int8", cpu_threads=max(2, min(8, (os.cpu_count() or 4) // 2)), num_workers=1, local_files_only=True)
-        self.update(job, stage="Transcrevendo a fala no seu computador", progress=27)
-        result, info = self.model.transcribe(str(audio), beam_size=3, word_timestamps=True, vad_filter=True, condition_on_previous_text=False)
-        segments = []
-        for segment in result:
-            self._check(job)
-            segments.append({"start": segment.start, "end": segment.end, "text": segment.text, "words": [{"start": word.start, "end": word.end, "word": word.word} for word in segment.words or []]})
-            self.update(job, progress=min(70, 27 + int(43 * segment.end / duration)))
-        (folder / "transcript.json").write_text(json.dumps({"language": info.language, "segments": segments}, ensure_ascii=False, indent=2), encoding="utf-8")
-        self.update(job, stage="Encontrando trechos completos na conversa", progress=72, language=info.language)
-        options = job["options"]
-        suggestions = suggest_clips(segments, duration, options.get("clip_length", "auto"))
-        output_format = options.get("output_format", "vertical")
-        # Fit preserves speakers at the edges; center crop is an explicit option.
-        if output_format == "original":
-            out_w, out_h = max(2, round(min(width, 1920) / 2) * 2), max(2, round(height * min(1, 1920 / width) / 2) * 2)
-            base_filter = f"scale={out_w}:{out_h},setsar=1"
-        elif output_format == "vertical_fit":
-            out_w, out_h = 720, 1280
-            base_filter = "scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:color=0x080f20,setsar=1"
+        folder = self.jobs_dir / job['id']
+        options = job['options']
+        prepared = None
+        if job['source_url'].startswith('prepared:'):
+            prepared = self.sources.get(job['source_url'].removeprefix('prepared:'), private=True)
+            video = Path(prepared['path'])
+        elif job['source_type'] == 'upload':
+            video = self.uploads / job['source_url'].removeprefix('local-upload:')
         else:
-            out_w, out_h = 720, 1280
-            base_filter = "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1"
+            video = self._download(job, folder)
+        self._check(job)
+        metadata = probe(video)
+        duration, width, height = metadata['duration'], metadata['width'], metadata['height']
+        if duration < 3 or duration > MAX_SECONDS:
+            raise ValueError('Escolha um vídeo entre três segundos e quatro horas.')
+        if shutil.disk_usage(self.data).free < max(1_000_000_000, video.stat().st_size // 2):
+            raise ValueError('Não há espaço suficiente no disco para criar os clipes.')
+        transcript_file = self.sources.root / prepared['id'] / 'transcript.json' if prepared else folder / 'transcript.json'
+        transcript = json.loads(transcript_file.read_text(encoding='utf-8')) if transcript_file.is_file() else None
+        if transcript and transcript.get('model_revision') == self.voice['revision']:
+            segments, language = transcript['segments'], transcript['language']
+            self.update(job, duration=duration, stage='Reutilizando a transcrição deste vídeo', progress=62)
+        else:
+            self.update(job, duration=duration, stage='Preparando o áudio', progress=22)
+            audio = folder / 'audio.wav'
+            self._ffmpeg(job, ['-i', str(video), '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', str(audio)], folder)
+            if self.model is None:
+                self.update(job, stage='Carregando a transcrição local', progress=25)
+                from faster_whisper import WhisperModel
+                model_path = self.voice_model_path
+                if not (model_path / 'model.bin').is_file():
+                    raise ValueError('O modelo de voz está ausente. Use o instalador completo do DGCLIPS.')
+                self.model = WhisperModel(str(model_path), device='cpu', compute_type='int8', cpu_threads=max(2, min(8, (os.cpu_count() or 4) // 2)), num_workers=1, local_files_only=True)
+            self.update(job, stage='Transcrevendo a fala no seu computador', progress=27)
+            result, info = self.model.transcribe(str(audio), beam_size=5, word_timestamps=True, vad_filter=True, condition_on_previous_text=False, initial_prompt=str(job['source_title'])[:350])
+            segments = []
+            for segment in result:
+                self._check(job)
+                segments.append({'start': segment.start, 'end': segment.end, 'text': segment.text, 'words': [{'start': word.start, 'end': word.end, 'word': word.word} for word in segment.words or []]})
+                self.update(job, progress=min(62, 27 + int(35 * segment.end / duration)))
+            language = info.language
+            transcript_file.write_text(json.dumps({'language': language, 'segments': segments, 'model_revision': self.voice['revision']}, ensure_ascii=False, indent=2), encoding='utf-8')
+            audio.unlink(missing_ok=True)
+        if transcript_file != folder / 'transcript.json':
+            shutil.copy2(transcript_file, folder / 'transcript.json')
+        self.update(job, language=language, stage='Preparando a curadoria de conteúdo', progress=64)
+        if options.get('selection_mode') == 'rules':
+            from editorial import requested_count
+            count = requested_count(options.get('clip_count'), duration)
+            suggestions = suggest_clips(segments, duration, options['clip_length'], count)
+            summary = {'requested': count, 'found': len(suggestions), 'note': 'Modo rápido por regras. Não usa análise editorial.'}
+        else:
+            def progress(stage, fraction, detail):
+                self.update(job, stage=stage, progress=64 + round(18 * fraction), analysis_detail=detail)
+            suggestions, summary = select_moments(self.editorial, segments, duration, options, progress, lambda: self._check(job))
+        self.editorial.close()
+        self.update(job, editorial=summary, analysis_detail={})
+        fonts = folder / 'fonts'
+        fonts.mkdir(exist_ok=True)
+        for font in (self.resources / 'fonts').glob('*.ttf'):
+            target = fonts / font.name
+            if not target.is_file():
+                try:
+                    os.link(font, target)
+                except OSError:
+                    shutil.copy2(font, target)
         for index, candidate in enumerate(suggestions):
             self._check(job)
-            self.update(job, stage=f"Criando clipe {index+1} de {len(suggestions)}", progress=75 + int(23 * index / len(suggestions)))
-            name = f"clipe-{index+1:02d}"
-            ass_name = name + ".ass"
-            (folder / ass_name).write_text(make_ass(segments, candidate["start"], candidate["end"], out_w, out_h, options.get("caption_template", "default")), encoding="utf-8-sig")
-            filters = base_filter
-            if options.get("add_subtitles", True):
-                filters += f",subtitles={ass_name}"
-            destination = folder / (name + ".mp4")
-            length = candidate["end"] - candidate["start"]
-            self._ffmpeg(job, ["-ss", str(candidate["start"]), "-i", str(video), "-t", str(length), "-map", "0:v:0", "-map", "0:a:0", "-vf", filters, "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(destination)], folder)
-            clip = {"id": name, "title": " ".join(candidate["text"].split()[:10]).rstrip(".,;:") + "…", "start": candidate["start"], "end": candidate["end"], "duration": length, "text": candidate["text"], "filename": destination.name}
+            self.update(job, stage=f'Criando clipe {index+1} de {len(suggestions)}', progress=84 + int(15 * index / len(suggestions)))
+            name = f'clipe-{index+1:02d}'
+            _, out_w, out_h = filter_plan(width, height, options)
+            ass_name = name + '.ass'
+            (folder / ass_name).write_text(make_captions(segments, candidate['start'], candidate['end'], out_w, out_h, options), encoding='utf-8-sig')
+            graph, _, _ = filter_plan(width, height, options, ass_name if options['add_subtitles'] else None)
+            destination = folder / (name + '.mp4')
+            length = candidate['end'] - candidate['start']
+            self._ffmpeg(job, ['-ss', str(candidate['start']), '-i', str(video), '-t', str(length), '-filter_complex', graph, '-map', '[outv]', '-map', '0:a:0', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', str(destination)], folder)
+            clip = {'id': name, 'title': candidate.get('title') or ' '.join(candidate['text'].split()[:10]).rstrip('.,;:') + '…', 'start': candidate['start'], 'end': candidate['end'], 'duration': length, 'text': candidate['text'], 'filename': destination.name, 'reason': candidate.get('reason'), 'kind': candidate.get('kind'), 'editorial_rank': candidate.get('editorial_rank'), 'caption_template': options['caption_template'], 'layout': options['layout']}
+            clip.update(evidence=candidate.get('evidence'), reviewed=candidate.get('reviewed', False))
             with self.lock:
-                job["clips"].append(clip)
-            self.update(job, clips_count=len(job["clips"]))
-        # Remove the extracted WAV after a successful run, preserve the input and captions.
-        audio.unlink(missing_ok=True)
+                job['clips'].append(clip)
+            self.update(job, clips_count=len(job['clips']))
+        if prepared is None:
+            self.sources.import_project(job, video, transcript_file)
 
     def close(self):
         self.stopping.set()
+        self.editorial.close()
+        self.sources.close()
         with self.lock:
             for event in self.events.values():
                 event.set()

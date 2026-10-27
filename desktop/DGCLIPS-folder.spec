@@ -6,9 +6,9 @@ root = Path(SPECPATH)
 destination = (Path(DISTPATH) / 'DGCLIPS').resolve()
 if root.resolve().is_relative_to(destination) or (destination / '.git').exists() or (destination / 'DGCLIPS-Dados').exists():
     raise RuntimeError('Choose a fresh build output. The destination contains source code or user media.')
-datas = [(str(root / 'ui-dist'), 'ui-dist'), (str(root / 'models'), 'models'), (str(root / 'licenses'), 'licenses'), (str(root / 'model-manifest.json'), '.'), (str(root.parent / 'LICENSE'), '.'), (str(root.parent / 'NOTICE.md'), '.')]
+datas = [(str(root / 'ui-dist'), 'ui-dist'), (str(root / 'models/whisper-turbo'), 'models/whisper-turbo'), (str(root / 'models/face'), 'models/face'), (str(root / 'fonts'), 'fonts'), (str(root / 'tools/llama'), 'tools/llama'), (str(root / 'licenses'), 'licenses'), (str(root / 'model-manifest.json'), '.'), (str(root / 'caption-presets.json'), '.'), (str(root / 'editorial-assets.json'), '.'), (str(root.parent / 'LICENSE'), '.'), (str(root.parent / 'NOTICE.md'), '.')]
 binaries = [(str(root / 'tools/ffmpeg.exe'), 'tools'), (str(root / 'tools/node.exe'), 'tools')]
-hiddenimports = ['webview.platforms.winforms', 'clr', 'pythonnet', 'clr_loader', 'faster_whisper', 'av']
+hiddenimports = ['webview.platforms.winforms', 'clr', 'pythonnet', 'clr_loader', 'faster_whisper', 'av', 'cv2']
 for package in ['faster_whisper', 'ctranslate2', 'onnxruntime', 'tokenizers', 'yt_dlp_ejs']:
     package_datas, package_binaries, package_imports = collect_all(package)
     datas += package_datas

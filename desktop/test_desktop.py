@@ -59,6 +59,8 @@ class TransportTests(unittest.TestCase):
         (self.folder / 'index.html').write_text('<html>DGCLIPS</html>')
         (self.folder / 'video.mp4').write_bytes(b'0123456789')
         self.server = DesktopServer(FakeEngine(), self.folder)
+        self.server.engine.data = self.folder
+        self.server.engine.lock = threading.RLock()
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.cookie = 'dgclips-desktop=' + self.server.token
 
@@ -79,6 +81,15 @@ class TransportTests(unittest.TestCase):
 
     def test_another_website_cannot_read_projects(self):
         self.assertEqual(self.request('GET', '/api/tasks/')[0], 401)
+
+    def test_preferences_validate_and_persist_without_exposing_sources(self):
+        headers = {'Cookie': self.cookie, 'Origin': self.server.origin, 'Content-Type': 'application/json'}
+        self.assertEqual(self.request('POST','/api/desktop/preferences',headers,json.dumps({'clip_count': 51}))[0],400)
+        status,_,body = self.request('POST','/api/desktop/preferences',headers,json.dumps({'clip_count': 12,'caption_template':'reels','source':{'url':'private'}}))
+        self.assertEqual(status,200)
+        self.assertNotIn('source',json.loads(body))
+        saved = self.request('GET','/api/desktop/preferences',{'Cookie':self.cookie})
+        self.assertEqual(json.loads(saved[2])['clip_count'],12)
 
     def test_cookie_is_http_only_same_site_and_start_token_is_removed(self):
         status, headers, _ = self.request('GET', '/start?token=' + self.server.token)

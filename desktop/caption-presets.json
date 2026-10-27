@@ -1,0 +1,11 @@
+[
+  {"id":"default","name":"Clean","description":"Frases leves, brancas e fáceis de ler.","font":"Manrope","size":0.031,"words":7,"chars":44,"motion":"fade","accent":"#FFFFFF","weight":0,"outline":2,"shadow":1,"case":"normal","surface":"none"},
+  {"id":"clean_box","name":"Clean Box","description":"Legenda discreta com fundo de alto contraste.","font":"Manrope","size":0.030,"words":7,"chars":44,"motion":"fade","accent":"#FFFFFF","weight":0,"outline":8,"shadow":0,"case":"normal","surface":"box"},
+  {"id":"hormozi","name":"Impacto","description":"Tipografia forte e destaque amarelo na palavra falada.","font":"Anton","size":0.046,"words":4,"chars":27,"motion":"highlight","accent":"#FFE74A","weight":0,"outline":5,"shadow":2,"case":"upper","surface":"none"},
+  {"id":"tiktok","name":"Dinâmica","description":"Palavra ativa em azul e entrada com um leve pop.","font":"Montserrat","size":0.040,"words":4,"chars":30,"motion":"pop_highlight","accent":"#66D9FF","weight":1,"outline":4,"shadow":2,"case":"normal","surface":"none"},
+  {"id":"reels","name":"Reels","description":"Frases curtas, letras fortes e destaque verde-lima.","font":"Montserrat","size":0.044,"words":3,"chars":25,"motion":"pop_highlight","accent":"#BAFF4B","weight":1,"outline":5,"shadow":2,"case":"upper","surface":"none"},
+  {"id":"karaoke","name":"Karaokê","description":"A cor acompanha a voz ao longo de cada palavra.","font":"Montserrat","size":0.039,"words":5,"chars":34,"motion":"karaoke","accent":"#FFE075","weight":1,"outline":4,"shadow":1,"case":"normal","surface":"none"},
+  {"id":"word_pop","name":"Palavra por palavra","description":"Uma palavra de cada vez, com presença e movimento.","font":"Anton","size":0.059,"words":1,"chars":22,"motion":"word_pop","accent":"#FFFFFF","weight":0,"outline":5,"shadow":2,"case":"upper","surface":"none"},
+  {"id":"neon","name":"Neon","description":"Destaque lilás com brilho contido para conteúdos noturnos.","font":"Montserrat","size":0.041,"words":4,"chars":29,"motion":"highlight","accent":"#DAA2FF","weight":1,"outline":4,"shadow":4,"case":"normal","surface":"neon"},
+  {"id":"cinema","name":"Cinema","description":"Leitura elegante e transições suaves para histórias.","font":"Lora","size":0.031,"words":8,"chars":46,"motion":"fade","accent":"#FFF5DF","weight":0,"outline":2,"shadow":2,"case":"normal","surface":"none"}
+]
